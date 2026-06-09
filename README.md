@@ -207,6 +207,7 @@ Safe authentication:
 - Use SSH keys or SSH agent forwarding.
 - Configure the key path with `HPC_SSH_KEY_PATH` only when appropriate.
 - Keep `HPC_STRICT_HOST_KEY_CHECKING=true` where possible.
+- On hosted platforms, set `HPC_KNOWN_HOSTS_PATH` to a secret-file path containing the approved host key.
 - Do not store HPC passwords, passcodes, one-time tokens, SSH private keys, or MFA flows in code, config, database, logs, `.env`, shell history, or notebooks.
 - Do not print SSH keys or secret paths in logs.
 
@@ -229,6 +230,7 @@ HPC_PYTHON_MODULE=
 HPC_MATTERGEN_ENV=
 HPC_RSYNC_EXTRA_ARGS=
 HPC_STRICT_HOST_KEY_CHECKING=true
+HPC_KNOWN_HOSTS_PATH=
 ```
 
 Admin-only HPC API:

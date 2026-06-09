@@ -84,6 +84,7 @@ class Settings:
     hpc_mattergen_env: Optional[str]
     hpc_rsync_extra_args: str
     hpc_strict_host_key_checking: bool
+    hpc_known_hosts_path: Optional[Path]
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -148,6 +149,9 @@ class Settings:
             hpc_mattergen_env=os.getenv("HPC_MATTERGEN_ENV") or None,
             hpc_rsync_extra_args=os.getenv("HPC_RSYNC_EXTRA_ARGS", ""),
             hpc_strict_host_key_checking=env_bool("HPC_STRICT_HOST_KEY_CHECKING", True),
+            hpc_known_hosts_path=Path(os.getenv("HPC_KNOWN_HOSTS_PATH", "")).expanduser()
+            if os.getenv("HPC_KNOWN_HOSTS_PATH")
+            else None,
         )
 
     @property
