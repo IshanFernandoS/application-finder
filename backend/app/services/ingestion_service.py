@@ -1,0 +1,204 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Dict, List
+
+from sqlalchemy.orm import Session
+
+from ..config import settings
+from ..database import ApplicationNodeRecord, DocumentRecord, EvidenceRecord
+from ..ingestion.chunker import chunk_pages
+from ..ingestion.deduplicator import document_key, file_hash
+from ..ingestion.metadata_extractor import extract_metadata, normalize_doi
+from ..ingestion.pdf_parser import parse_pdf
+from ..ingestion.text_parser import parse_text_file
+from ..literature_sources.arxiv_source import ArxivSource
+from ..literature_sources.base import LiteratureSearchResult
+from ..literature_sources.crossref import CrossrefSource
+from ..literature_sources.openalex import OpenAlexSource
+from ..literature_sources.pubmed import PubMedSource
+from ..literature_sources.semantic_scholar import SemanticScholarSource
+from ..literature_sources.zotero_import import import_zotero_file
+from ..schemas import Document, EvidenceChunk
+from .ids import stable_id
+from .object_storage_service import ObjectStorageService
+from .serialization import model_to_dict
+
+
+class IngestionService:
+    supported_text_suffixes = {".txt", ".md", ".markdown"}
+
+    def ingest_local(self, db: Session) -> Dict[str, int]:
+        settings.data_dir.mkdir(parents=True, exist_ok=True)
+        counts = {"documents": 0, "chunks": 0, "skipped": 0}
+        object_storage = ObjectStorageService()
+        paths: List[Path] = []
+        paths.extend(sorted((settings.data_dir / "pdfs").glob("*.pdf")))
+        evidence_dir = settings.data_dir / "evidence"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        for suffix in self.supported_text_suffixes:
+            paths.extend(sorted(evidence_dir.glob(f"*{suffix}")))
+
+        for path in paths:
+            parsed = self._parse_path(path)
+            if not parsed:
+                counts["skipped"] += 1
+                continue
+            first_text = "\n".join(text for _, _, text in parsed[:3])
+            meta = extract_metadata(path, first_text)
+            doi = normalize_doi(meta.get("doi")) if isinstance(meta.get("doi"), str) else None
+            doc_key = document_key(doi, str(meta["title"]), path)
+            document_id = stable_id("doc", doc_key)
+            if db.get(DocumentRecord, document_id):
+                counts["skipped"] += 1
+                continue
+            source_path = str(path)
+            object_path = self._storage_object_for_local_path(path)
+            if object_path:
+                source_path = object_storage.upload_file(path, object_path)
+            document = Document(
+                document_id=document_id,
+                title=str(meta["title"]),
+                authors=list(meta.get("authors") or []),
+                year=meta.get("year") if isinstance(meta.get("year"), int) else None,
+                doi=doi,
+                source_type="local_pdf" if path.suffix.lower() == ".pdf" else "local_text",
+                source_path=source_path,
+                metadata={"file_hash": file_hash(path), "original_name": path.name},
+            )
+            db.add(DocumentRecord(document_id=document_id, doi=doi, title=document.title, payload=model_to_dict(document)))
+            chunk_rows = []
+            for idx, (page, section, text) in enumerate(chunk_pages(parsed), start=1):
+                evidence_id = stable_id("ev", document_id, page, section, idx, text[:120])
+                chunk = EvidenceChunk(
+                    evidence_id=evidence_id,
+                    document_id=document_id,
+                    title=document.title,
+                    authors=document.authors,
+                    year=document.year,
+                    doi=document.doi,
+                    source_type=document.source_type,
+                    source_path=document.source_path,
+                    page=page,
+                    section=section,
+                    text=text,
+                    snippet=text[:420],
+                    metadata={"chunk_index": idx},
+                )
+                chunk_rows.append(EvidenceRecord(evidence_id=evidence_id, document_id=document_id, text=text, payload=model_to_dict(chunk)))
+            db.add_all(chunk_rows)
+            counts["documents"] += 1
+            counts["chunks"] += len(chunk_rows)
+        db.commit()
+        self._write_jsonl_backup(db)
+        return counts
+
+    def ingest_zotero(self, db: Session) -> Dict[str, int]:
+        zotero_dir = settings.data_dir / "zotero"
+        zotero_dir.mkdir(parents=True, exist_ok=True)
+        added = 0
+        for export_path in sorted(list(zotero_dir.glob("*.csv")) + list(zotero_dir.glob("*.bib")) + list(zotero_dir.glob("*.ris"))):
+            for result in import_zotero_file(export_path):
+                if self._store_metadata_result(db, result):
+                    added += 1
+        db.commit()
+        return {"metadata_records": added}
+
+    def public_search(self, query: str, limit: int = 10) -> List[LiteratureSearchResult]:
+        if not settings.enable_online_metadata:
+            return []
+        sources = [
+            OpenAlexSource(),
+            CrossrefSource(),
+            ArxivSource(),
+            SemanticScholarSource(settings.semantic_scholar_api_key),
+            PubMedSource(),
+        ]
+        results: List[LiteratureSearchResult] = []
+        for source in sources:
+            try:
+                results.extend(source.search(query, limit=max(1, limit // len(sources))))
+            except Exception as exc:
+                results.append(
+                    LiteratureSearchResult(
+                        title=f"{source.source_name} search failed",
+                        authors=[],
+                        year=None,
+                        doi=None,
+                        url=None,
+                        source=source.source_name,
+                        abstract=str(exc),
+                    )
+                )
+        return results[:limit]
+
+    def status(self, db: Session) -> Dict[str, int]:
+        return {
+            "documents": db.query(DocumentRecord).count(),
+            "evidence_chunks": db.query(EvidenceRecord).count(),
+            "application_nodes": db.query(ApplicationNodeRecord).count(),
+        }
+
+    def _parse_path(self, path: Path) -> List[tuple]:
+        if path.suffix.lower() == ".pdf":
+            return parse_pdf(path)
+        if path.suffix.lower() in self.supported_text_suffixes:
+            return parse_text_file(path)
+        return []
+
+    def _store_metadata_result(self, db: Session, result: LiteratureSearchResult) -> bool:
+        doi = normalize_doi(result.doi)
+        document_id = stable_id("doc", doi or result.title, result.year or "")
+        if db.get(DocumentRecord, document_id):
+            return False
+        document = Document(
+            document_id=document_id,
+            title=result.title,
+            authors=result.authors,
+            year=result.year,
+            doi=doi,
+            source_type=result.source,
+            source_path=result.url,
+            metadata=result.extra or {},
+        )
+        db.add(DocumentRecord(document_id=document_id, doi=doi, title=document.title, payload=model_to_dict(document)))
+        if result.abstract:
+            evidence_id = stable_id("ev", document_id, "abstract")
+            chunk = EvidenceChunk(
+                evidence_id=evidence_id,
+                document_id=document_id,
+                title=document.title,
+                authors=document.authors,
+                year=document.year,
+                doi=document.doi,
+                source_type=result.source,
+                source_path=result.url,
+                page=None,
+                section="abstract",
+                text=result.abstract,
+                snippet=result.abstract[:420],
+                metadata={"source": result.source},
+            )
+            db.add(EvidenceRecord(evidence_id=evidence_id, document_id=document_id, text=chunk.text, payload=model_to_dict(chunk)))
+        return True
+
+    def _write_jsonl_backup(self, db: Session) -> None:
+        backup_path = settings.data_dir / "metadata" / "evidence_chunks.jsonl"
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        with backup_path.open("w", encoding="utf-8") as handle:
+            for record in db.query(EvidenceRecord).order_by(EvidenceRecord.evidence_id):
+                handle.write(json.dumps(record.payload, ensure_ascii=True) + "\n")
+        ObjectStorageService().upload_file(
+            backup_path,
+            "metadata/evidence_chunks.jsonl",
+            content_type="application/x-ndjson",
+        )
+
+    def _storage_object_for_local_path(self, path: Path) -> str:
+        suffix = path.suffix.lower()
+        if suffix == ".pdf":
+            return f"uploads/pdfs/{path.name}"
+        if suffix in self.supported_text_suffixes:
+            return f"uploads/evidence/{path.name}"
+        return ""

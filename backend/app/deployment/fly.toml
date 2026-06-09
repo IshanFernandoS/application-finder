@@ -1,0 +1,32 @@
+app = "gap2material-em-backend"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "backend/app/deployment/Dockerfile.backend"
+
+[env]
+  DEPLOYMENT_ENV = "fly"
+  DATA_DIR = "/data"
+  OUTPUT_DIR = "/outputs"
+
+[[mounts]]
+  source = "gap2material_data"
+  destination = "/data"
+
+[[services]]
+  internal_port = 8000
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "10s"
+    method = "get"
+    path = "/api/health"

@@ -1,0 +1,2 @@
+include:
+  - backend/app/deployment/docker-compose.yml

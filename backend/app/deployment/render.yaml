@@ -1,0 +1,97 @@
+services:
+  - type: web
+    name: application-finder-backend
+    env: python
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: DEPLOYMENT_ENV
+        value: render
+      - key: DATA_DIR
+        value: /tmp/gap2material-data
+      - key: OUTPUT_DIR
+        value: /tmp/gap2material-outputs
+      - key: DATABASE_URL
+        sync: false
+      - key: VECTOR_BACKEND
+        value: chroma
+      - key: OBJECT_STORAGE_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: gap2material-artifacts
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-large
+      - key: ENABLE_ONLINE_METADATA
+        value: "true"
+      - key: ENABLE_OPENAI_REASONING
+        value: "true"
+      - key: ENABLE_MATTERGEN
+        value: "true"
+      - key: MATTERGEN_MODE
+        value: hpc_slurm
+      - key: MATTERGEN_WORKER_URL
+        sync: false
+      - key: MATTERGEN_API_KEY
+        sync: false
+      - key: HPC_ENABLED
+        value: "false"
+      - key: HPC_MODE
+        value: slurm_ssh
+      - key: HPC_HOST
+        value: login.hpc.qmul.ac.uk
+      - key: HPC_USERNAME
+        sync: false
+      - key: HPC_SSH_KEY_PATH
+        sync: false
+      - key: HPC_WORKDIR
+        sync: false
+      - key: HPC_SLURM_PARTITION
+        sync: false
+      - key: HPC_SLURM_ACCOUNT
+        sync: false
+      - key: HPC_GPU_REQUEST
+        sync: false
+      - key: HPC_TIME_LIMIT
+        value: "04:00:00"
+      - key: HPC_CPUS_PER_TASK
+        value: "8"
+      - key: HPC_MEM
+        value: 32G
+      - key: HPC_PYTHON_MODULE
+        sync: false
+      - key: HPC_MATTERGEN_ENV
+        sync: false
+      - key: HPC_RSYNC_EXTRA_ARGS
+        sync: false
+      - key: HPC_STRICT_HOST_KEY_CHECKING
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+      - key: ENABLE_ANALYTICS
+        value: "true"
+      - key: ANALYTICS_PROVIDER
+        value: internal
+      - key: ACCESS_LOGGING_ENABLED
+        value: "true"
+      - key: ACCESS_LOG_HASH_SALT
+        sync: false
+      - key: ACCESS_LOG_STORE_RAW_IP
+        value: "false"
+      - key: ACCESS_LOG_STORE_USER_AGENT_RAW
+        value: "false"
+      - key: ACCESS_LOG_GEOIP
+        value: "false"
+      - key: ADMIN_API_KEY
+        sync: false
