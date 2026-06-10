@@ -2,6 +2,8 @@ import { AppShell } from "@/components/AppShell";
 import { IngestionPanel } from "@/components/IngestionPanel";
 import { apiGet } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 export default async function IngestPage() {
   const status = await apiGet<{ documents: number; evidence_chunks: number; application_nodes?: number }>("/ingest/status").catch(() => undefined);
   return (
