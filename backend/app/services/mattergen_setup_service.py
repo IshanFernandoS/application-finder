@@ -18,13 +18,19 @@ class MatterGenSetupService:
         gpu_available = self._gpu_available()
         python_version = tuple(int(part) for part in platform.python_version_tuple()[:2])
         python_compatible = python_version >= (3, 10)
-        worker_configured = bool(settings.mattergen_worker_url)
+        hpc_configured = bool(settings.hpc_enabled and settings.hpc_host and settings.hpc_username and settings.hpc_workdir)
+        hpc_mattergen_configured = bool(hpc_configured and settings.hpc_mattergen_env)
+        worker_configured = bool(settings.mattergen_worker_url or hpc_mattergen_configured)
         details = []
-        if not path.exists():
+        if hpc_mattergen_configured:
+            details.append("MatterGen is configured to run through the HPC Slurm worker; a local MATTERGEN_PATH is not required for hosted generation.")
+        elif hpc_configured:
+            details.append("HPC worker access is configured, but HPC_MATTERGEN_ENV is not set.")
+        if not path.exists() and not hpc_configured:
             details.append("MATTERGEN_PATH does not exist.")
-        if not importable:
+        if not importable and not worker_configured:
             details.append("The `mattergen` Python package is not importable in this environment.")
-        if not checkpoints_found:
+        if not checkpoints_found and not worker_configured:
             details.append("No real MatterGen checkpoint files were found under MATTERGEN_PATH; Git LFS pointer files do not count.")
         if not gpu_available and not worker_configured:
             details.append("No local CUDA GPU was detected and no remote worker URL is configured.")
@@ -33,6 +39,10 @@ class MatterGenSetupService:
 
         if worker_configured:
             status = "available" if settings.mattergen_api_key or settings.mattergen_worker_url else "setup_needed"
+            if hpc_mattergen_configured:
+                status = "available"
+        elif hpc_configured:
+            status = "setup_needed"
         elif not path.exists():
             status = "path_missing"
         elif not importable:
@@ -45,7 +55,7 @@ class MatterGenSetupService:
             status = "available"
         return MatterGenStatus(
             status=status,
-            mode=settings.mattergen_mode,
+            mode="hpc_slurm" if hpc_mattergen_configured else settings.mattergen_mode,
             path=str(path),
             importable=importable,
             checkpoints_found=checkpoints_found,

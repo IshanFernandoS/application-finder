@@ -13,11 +13,11 @@ export function MatterGenPanel({ status, pathway }: { status?: MatterGenStatus; 
         {status ? <StatusBadge status={status.status} /> : null}
       </div>
       {status ? (
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm lg:grid-cols-4">
           <Info label="Mode" value={status.mode} />
+          <Info label="Generation route" value={status.worker_configured ? "HPC / remote worker" : "local runtime"} />
           <Info label="GPU" value={status.gpu_available ? "available" : "not detected"} />
-          <Info label="Importable" value={status.importable ? "yes" : "no"} />
-          <Info label="Checkpoints" value={status.checkpoints_found ? "found" : "missing"} />
+          <Info label="Worker" value={status.worker_configured ? "configured" : "not configured"} />
         </dl>
       ) : null}
       {pathway?.mattergen_constraints ? (
@@ -27,11 +27,11 @@ export function MatterGenPanel({ status, pathway }: { status?: MatterGenStatus; 
           <div className="mt-2">{pathway.mattergen_constraints.unsupported_em_properties.length} unsupported EM properties retained for validation.</div>
         </div>
       ) : null}
-      {status && status.status !== "available" ? (
+      {status ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded border border-line bg-shell p-4 text-sm">
           <div>
-            <div className="font-medium text-ink">Run MatterGen on HPC</div>
-            <div className="mt-1 text-muted">Submit generation from an FBS-PM pathway through the admin-only Slurm worker.</div>
+            <div className="font-medium text-ink">{status.worker_configured ? "MatterGen generation is routed through HPC" : "Run MatterGen on HPC"}</div>
+            <div className="mt-1 text-muted">Use an FBS-PM pathway, translate the property envelope into MatterGen constraints, then submit the Slurm job from the HPC Worker.</div>
           </div>
           <Link href="/hpc" className="focus-ring rounded bg-accent px-3 py-2 text-sm font-medium text-white">
             Open HPC Worker
