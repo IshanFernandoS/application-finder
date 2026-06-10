@@ -29,11 +29,11 @@ scripts/hpc_mattergen_submit.sh PATHWAY_ID outputs/pathway_constraints.json
 
 Environment variables:
 
-- `HPC_SLURM_PARTITION`, default `gpu` in the legacy helper
+- `HPC_SLURM_PARTITION`, default `gpushort` in the legacy helper for quick MatterGen runs
 - `HPC_GPU_REQUEST`, default `gpu:1`
 - `HPC_CPUS_PER_TASK`, default `8`
 - `HPC_MEM`, default `32G`
-- `HPC_TIME_LIMIT`, default `04:00:00`
+- `HPC_TIME_LIMIT`, default `01:00:00`
 - `HPC_WORKDIR`, default `/data/scratch/$HPC_USERNAME/gap2material-em`
 
 The legacy helpers still accept old aliases such as `HPC_USER`, `HPC_KEY`, `HPC_PROJECT_DIR`, `HPC_PARTITION`, `HPC_GPUS`, `HPC_CPUS`, and `HPC_TIME`, but new deployments should use the variables above.
