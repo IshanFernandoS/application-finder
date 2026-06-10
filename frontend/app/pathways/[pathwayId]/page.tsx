@@ -2,6 +2,7 @@ import { AppShell } from "@/components/AppShell";
 import { EMPropertyEnvelopePanel } from "@/components/EMPropertyEnvelopePanel";
 import { MaterialCandidateTable } from "@/components/MaterialCandidateTable";
 import { MatterGenPanel } from "@/components/MatterGenPanel";
+import { PathwayActionPanel } from "@/components/PathwayActionPanel";
 import { PathwayGraph } from "@/components/PathwayGraph";
 import { ValidationPanel } from "@/components/ValidationPanel";
 import { apiGet } from "@/lib/api";
@@ -15,6 +16,7 @@ export default async function PathwayPage({ params }: { params: Promise<{ pathwa
     <AppShell>
       <div className="grid gap-5">
         <PathwayGraph pathway={pathway} />
+        <PathwayActionPanel pathway={pathway} />
         <div className="grid gap-5 xl:grid-cols-2">
           <EMPropertyEnvelopePanel requirements={pathway?.material_property_envelope} />
           <MatterGenPanel status={status} pathway={pathway} />

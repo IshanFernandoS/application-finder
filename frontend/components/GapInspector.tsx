@@ -1,11 +1,31 @@
 "use client";
 
-import { FileDown, GitBranch, Library, PlayCircle } from "lucide-react";
-import type { Gap } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { FileDown, GitBranch, Library, Loader2, PlayCircle } from "lucide-react";
+import type { EvidenceChunk, EvaluationRun, Gap, Pathway } from "@/lib/types";
 import { apiPost } from "@/lib/api";
 import { GapScoreCard } from "./GapScoreCard";
 
 export function GapInspector({ gap }: { gap?: Gap }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | undefined>();
+  const [message, setMessage] = useState<string | undefined>();
+  const [error, setError] = useState<string | undefined>();
+
+  async function runAction(name: string, action: () => Promise<void>) {
+    setBusy(name);
+    setMessage(undefined);
+    setError(undefined);
+    try {
+      await action();
+    } catch (exc) {
+      setError(readableError(exc));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   if (!gap) {
     return (
       <aside className="panel p-5">
@@ -15,10 +35,48 @@ export function GapInspector({ gap }: { gap?: Gap }) {
     );
   }
   const actions = [
-    { label: "Retrieve boundary evidence", icon: Library, run: () => apiPost(`/gaps/${gap.gap_id}/retrieve-evidence`) },
-    { label: "Generate FBS-PM pathways", icon: GitBranch, run: () => apiPost(`/gaps/${gap.gap_id}/generate-pathways`) },
-    { label: "Run baseline comparison", icon: PlayCircle, run: () => apiPost("/evals/baselines/run", { mode: "baseline_nearest_neighbour", gap_id: gap.gap_id }) },
-    { label: "Export report", icon: FileDown, run: () => apiPost(`/reports/${gap.gap_id}`) }
+    {
+      label: "Retrieve boundary evidence",
+      icon: Library,
+      run: () =>
+        runAction("evidence", async () => {
+          const evidence = await apiPost<EvidenceChunk[]>(`/gaps/${gap.gap_id}/retrieve-evidence`);
+          setMessage(`${evidence.length} boundary evidence chunks retrieved`);
+          router.push(`/gaps/${gap.gap_id}`);
+        })
+    },
+    {
+      label: "Generate FBS-PM pathways",
+      icon: GitBranch,
+      run: () =>
+        runAction("pathways", async () => {
+          const pathways = await apiPost<Pathway[]>(`/gaps/${gap.gap_id}/generate-pathways`);
+          if (pathways[0]?.pathway_id) {
+            router.push(`/pathways/${pathways[0].pathway_id}`);
+          } else {
+            setMessage("No FBS-PM pathways were generated for this gap");
+          }
+        })
+    },
+    {
+      label: "Run baseline comparison",
+      icon: PlayCircle,
+      run: () =>
+        runAction("baseline", async () => {
+          const run = await apiPost<EvaluationRun>("/evals/baselines/run", { mode: "baseline_nearest_neighbour", gap_id: gap.gap_id });
+          setMessage(`${run.mode} evaluation recorded with ${run.metrics.length} metrics`);
+          router.refresh();
+        })
+    },
+    {
+      label: "Export report",
+      icon: FileDown,
+      run: () =>
+        runAction("report", async () => {
+          await apiPost(`/reports/${gap.gap_id}`);
+          router.push("/reports");
+        })
+    }
   ];
   return (
     <aside className="panel max-h-[760px] overflow-auto p-5 scrollbar">
@@ -57,16 +115,30 @@ export function GapInspector({ gap }: { gap?: Gap }) {
           return (
             <button
               key={action.label}
-              className="focus-ring flex items-center justify-center gap-2 rounded border border-line bg-shell px-3 py-2 text-sm font-medium hover:border-accent hover:text-accent"
+              className="focus-ring flex items-center justify-center gap-2 rounded border border-line bg-shell px-3 py-2 text-sm font-medium hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={Boolean(busy)}
               type="button"
-              onClick={() => action.run().catch(() => undefined)}
+              onClick={action.run}
             >
-              <Icon className="h-4 w-4" aria-hidden />
+              {busy && action.label.toLowerCase().includes(busy) ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Icon className="h-4 w-4" aria-hidden />}
               {action.label}
             </button>
           );
         })}
       </div>
+      {message ? <div className="mt-4 rounded border border-teal/40 bg-teal/10 p-3 text-sm">{message}</div> : null}
+      {error ? <div className="mt-4 rounded border border-coral/40 bg-coral/10 p-3 text-sm">{error}</div> : null}
     </aside>
   );
+}
+
+function readableError(exc: unknown) {
+  const raw = exc instanceof Error ? exc.message : String(exc);
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.detail === "string") return parsed.detail;
+  } catch {
+    // Leave plain error messages untouched.
+  }
+  return raw;
 }

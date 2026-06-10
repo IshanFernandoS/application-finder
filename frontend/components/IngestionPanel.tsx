@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { CheckSquare, ExternalLink, Loader2, PlusCircle, Search, Square, UploadCloud } from "lucide-react";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
-import type { IngestionStatus, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
+import type { ApplicationNode, IngestionStatus, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
 
-export function IngestionPanel() {
+export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionStatus }) {
   const [query, setQuery] = useState("electromagnetic metamaterial inverse design high permittivity low loss");
   const [limit, setLimit] = useState(20);
   const [results, setResults] = useState<LiteratureResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<IngestionStatus | undefined>(initialStatus);
   const [busy, setBusy] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
@@ -48,9 +49,14 @@ export function IngestionPanel() {
       () => ingestResults(selectedResults),
       (summary) => {
         setMessage(`${summary.documents_added} papers and ${summary.evidence_chunks_added} evidence chunks added`);
+        setStatus({ documents: summary.documents, evidence_chunks: summary.evidence_chunks, application_nodes: status?.application_nodes });
         setSelected(new Set());
       }
     );
+  }
+
+  async function refreshStatus() {
+    setStatus(await apiGet<IngestionStatus>("/ingest/status"));
   }
 
   function toggleResult(item: LiteratureResult) {
@@ -80,7 +86,10 @@ export function IngestionPanel() {
           className="focus-ring inline-flex items-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
           disabled={Boolean(busy)}
           onClick={() =>
-            runAction("local", () => apiPost("/ingest/files"), () => setMessage("Local files ingested"))
+            runAction("local", () => apiPost("/ingest/files"), () => {
+              setMessage("Local files ingested");
+              void refreshStatus().catch(() => undefined);
+            })
           }
           type="button"
         >
@@ -90,7 +99,12 @@ export function IngestionPanel() {
         <button
           className="focus-ring rounded border border-line px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
           disabled={Boolean(busy)}
-          onClick={() => runAction("zotero", () => apiPost("/ingest/zotero"), () => setMessage("Zotero exports imported"))}
+          onClick={() =>
+            runAction("zotero", () => apiPost("/ingest/zotero"), () => {
+              setMessage("Zotero exports imported");
+              void refreshStatus().catch(() => undefined);
+            })
+          }
           type="button"
         >
           Import Zotero exports
@@ -101,8 +115,11 @@ export function IngestionPanel() {
           onClick={() =>
             runAction(
               "descriptors",
-              () => apiPost("/ingest/extract-descriptors?scope_id=electromagnetic_functional_materials&limit=50"),
-              () => setMessage("Descriptor extraction requested")
+              () => apiPost<ApplicationNode[]>("/ingest/extract-descriptors?scope_id=electromagnetic_functional_materials&limit=50"),
+              (nodes) => {
+                setMessage(`${nodes.length} application descriptors extracted`);
+                void refreshStatus().catch(() => undefined);
+              }
             )
           }
           type="button"
@@ -206,7 +223,25 @@ export function IngestionPanel() {
           })}
         </div>
       ) : null}
+
+      <section className="border-t border-line pt-5">
+        <h2 className="text-base font-semibold">Corpus Status</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <Metric label="Documents" value={status?.documents ?? 0} />
+          <Metric label="Evidence chunks" value={status?.evidence_chunks ?? 0} />
+          <Metric label="Application descriptors" value={status?.application_nodes ?? 0} />
+        </div>
+      </section>
     </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded border border-line bg-shell p-4">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-2 text-xl font-semibold">{value}</div>
+    </div>
   );
 }
 
