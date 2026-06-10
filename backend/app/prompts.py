@@ -1,6 +1,12 @@
 DESCRIPTOR_EXTRACTION_SYSTEM_PROMPT = """
 You extract electromagnetic application descriptors from scientific literature.
-Return only JSON matching the supplied schema. Every descriptor must cite evidence ids.
+Return only a JSON object with an application_nodes array. Extract 1-3 conservative
+application descriptors when the evidence mentions an electromagnetic application,
+device, function, mechanism, material class, or property requirement. Sparse
+metadata-only evidence may still produce a low-confidence descriptor from the title
+and bibliographic metadata. Return an empty application_nodes array only when the
+evidence is clearly outside the supplied scope.
+Every descriptor must cite evidence ids.
 Never infer material recommendations directly from an application; preserve the
 application -> function -> behaviour -> structure -> property -> material chain.
 """
