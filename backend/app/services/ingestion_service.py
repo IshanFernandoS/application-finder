@@ -186,42 +186,70 @@ class IngestionService:
 
     def _store_metadata_result(self, db: Session, result: LiteratureSearchResult) -> bool:
         doi = normalize_doi(result.doi)
-        if doi and db.query(DocumentRecord).filter(DocumentRecord.doi == doi).first():
-            return False
         document_id = stable_id("doc", doi or result.title, result.year or "")
-        if db.get(DocumentRecord, document_id):
-            return False
-        document = Document(
-            document_id=document_id,
-            title=result.title,
-            authors=result.authors,
-            year=result.year,
-            doi=doi,
-            source_type=result.source,
-            source_path=result.url,
-            metadata=result.extra or {},
-        )
-        db.add(DocumentRecord(document_id=document_id, doi=doi, title=document.title, payload=model_to_dict(document)))
-        if result.abstract:
-            evidence_id = stable_id("ev", document_id, "abstract")
-            chunk = EvidenceChunk(
-                evidence_id=evidence_id,
+        existing = db.query(DocumentRecord).filter(DocumentRecord.doi == doi).first() if doi else None
+        if not existing:
+            existing = db.get(DocumentRecord, document_id)
+
+        added = False
+        if existing:
+            document = Document(**existing.payload)
+        else:
+            document = Document(
                 document_id=document_id,
-                title=document.title,
-                authors=document.authors,
-                year=document.year,
-                doi=document.doi,
+                title=result.title,
+                authors=result.authors,
+                year=result.year,
+                doi=doi,
                 source_type=result.source,
                 source_path=result.url,
-                page=None,
-                section="abstract",
-                text=result.abstract,
-                snippet=result.abstract[:420],
-                metadata={"source": result.source},
+                metadata=result.extra or {},
             )
-            db.add(EvidenceRecord(evidence_id=evidence_id, document_id=document_id, text=chunk.text, payload=model_to_dict(chunk)))
+            db.add(DocumentRecord(document_id=document_id, doi=doi, title=document.title, payload=model_to_dict(document)))
+            added = True
+
+        if self._store_metadata_evidence(db, document, result):
+            added = True
         db.flush()
+        return added
+
+    def _store_metadata_evidence(self, db: Session, document: Document, result: LiteratureSearchResult) -> bool:
+        text, section = self._metadata_evidence_text(result)
+        evidence_id = stable_id("ev", document.document_id, section)
+        if db.get(EvidenceRecord, evidence_id):
+            return False
+        chunk = EvidenceChunk(
+            evidence_id=evidence_id,
+            document_id=document.document_id,
+            title=document.title,
+            authors=document.authors,
+            year=document.year,
+            doi=document.doi,
+            source_type=result.source,
+            source_path=result.url,
+            page=None,
+            section=section,
+            text=text,
+            snippet=text[:420],
+            metadata={"source": result.source, "metadata_only": section == "metadata"},
+        )
+        db.add(EvidenceRecord(evidence_id=evidence_id, document_id=document.document_id, text=chunk.text, payload=model_to_dict(chunk)))
         return True
+
+    def _metadata_evidence_text(self, result: LiteratureSearchResult) -> tuple[str, str]:
+        abstract = (result.abstract or "").strip()
+        if abstract:
+            return abstract, "abstract"
+        lines = [
+            result.title.strip(),
+            f"Authors: {', '.join(result.authors)}" if result.authors else "",
+            f"Year: {result.year}" if result.year else "",
+            f"DOI: {normalize_doi(result.doi)}" if result.doi else "",
+            f"URL: {result.url}" if result.url else "",
+            f"Source: {result.source}",
+            "No abstract was available from the public metadata source.",
+        ]
+        return "\n".join(line for line in lines if line), "metadata"
 
     def _dedupe_results(self, results: List[LiteratureSearchResult]) -> List[LiteratureSearchResult]:
         seen = set()

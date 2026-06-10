@@ -76,3 +76,83 @@ def test_public_literature_results_ingest_and_skip_duplicates(tmp_path: Path, mo
         assert (tmp_path / "metadata" / "evidence_chunks.jsonl").exists()
     finally:
         db.close()
+
+
+def test_public_literature_ingest_creates_metadata_evidence_without_abstract(tmp_path: Path, monkeypatch):
+    test_settings = replace(app_settings, data_dir=tmp_path, object_storage_backend="local")
+    monkeypatch.setattr(ingestion_module, "settings", test_settings)
+    monkeypatch.setattr(storage_module, "settings", test_settings)
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    db = Session()
+    try:
+        summary = IngestionService().ingest_public_results(
+            db,
+            [
+                LiteratureResult(
+                    title="Metadata Only Electromagnetic Materials Paper",
+                    authors=["A. Researcher", "B. Scientist"],
+                    year=2024,
+                    doi="10.1000/noabstract",
+                    url="https://example.test/no-abstract",
+                    source="openalex",
+                )
+            ],
+        )
+
+        assert summary["documents_added"] == 1
+        assert summary["evidence_chunks_added"] == 1
+        chunk = db.query(EvidenceRecord).one()
+        assert chunk.payload["section"] == "metadata"
+        assert chunk.payload["metadata"]["metadata_only"] is True
+        assert "No abstract was available" in chunk.text
+        assert "Metadata Only Electromagnetic Materials Paper" in chunk.text
+    finally:
+        db.close()
+
+
+def test_public_literature_ingest_backfills_missing_metadata_evidence(tmp_path: Path, monkeypatch):
+    test_settings = replace(app_settings, data_dir=tmp_path, object_storage_backend="local")
+    monkeypatch.setattr(ingestion_module, "settings", test_settings)
+    monkeypatch.setattr(storage_module, "settings", test_settings)
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    db = Session()
+    try:
+        document = {
+            "document_id": "doc_existing",
+            "title": "Existing Metadata Only Paper",
+            "authors": [],
+            "year": 2024,
+            "doi": "10.1000/existing",
+            "source_type": "openalex",
+            "source_path": "https://example.test/existing",
+            "metadata": {},
+        }
+        db.add(DocumentRecord(document_id=document["document_id"], doi=document["doi"], title=document["title"], payload=document))
+        db.commit()
+
+        summary = IngestionService().ingest_public_results(
+            db,
+            [
+                LiteratureResult(
+                    title="Existing Metadata Only Paper",
+                    year=2024,
+                    doi="10.1000/existing",
+                    url="https://example.test/existing",
+                    source="openalex",
+                )
+            ],
+        )
+
+        assert summary["documents_added"] == 0
+        assert summary["evidence_chunks_added"] == 1
+        assert summary["skipped"] == 0
+        assert db.query(DocumentRecord).count() == 1
+        assert db.query(EvidenceRecord).one().payload["section"] == "metadata"
+    finally:
+        db.close()
