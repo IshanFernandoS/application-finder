@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -125,6 +126,44 @@ def coerce_string_list(value: Any) -> List[str]:
     return [str(value)]
 
 
+def coerce_coordinates(value: Any) -> Optional[List[float]]:
+    if value in (None, "", []):
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or stripped in {"[]", "null", "None"}:
+            return None
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                return coerce_coordinates(json.loads(stripped))
+            except Exception:
+                return None
+        parts = [part.strip() for part in stripped.replace(";", ",").split(",")]
+        if len(parts) >= 2:
+            try:
+                return [float(parts[0]), float(parts[1])]
+            except ValueError:
+                return None
+        return None
+    if isinstance(value, dict):
+        x = value.get("x", value.get("0"))
+        y = value.get("y", value.get("1"))
+        if x is None or y is None:
+            return None
+        try:
+            return [float(x), float(y)]
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, (list, tuple)):
+        if len(value) < 2:
+            return None
+        try:
+            return [float(value[0]), float(value[1])]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 class ApplicationNode(BaseModel):
     node_id: str
     label: str
@@ -161,6 +200,11 @@ class ApplicationNode(BaseModel):
     @classmethod
     def coerce_string_lists(cls, value: Any) -> List[str]:
         return coerce_string_list(value)
+
+    @field_validator("coordinates", mode="before")
+    @classmethod
+    def coerce_coordinates_field(cls, value: Any) -> Optional[List[float]]:
+        return coerce_coordinates(value)
 
 
 class ApplicationCluster(BaseModel):

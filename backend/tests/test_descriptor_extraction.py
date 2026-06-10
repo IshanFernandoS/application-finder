@@ -264,3 +264,35 @@ def test_descriptor_extraction_normalizes_qualitative_confidence(monkeypatch):
         assert db.query(ApplicationNodeRecord).count() == 1
     finally:
         db.close()
+
+
+def test_descriptor_extraction_normalizes_empty_coordinates(monkeypatch):
+    _configure_fake_openai(
+        monkeypatch,
+        (
+            '{"application_nodes":[{'
+            '"label":"Coordinate-free absorber descriptor",'
+            '"application_text":"An electromagnetic absorber descriptor without embedded coordinates.",'
+            '"domain":"absorbers",'
+            '"function":"electromagnetic absorption control",'
+            '"coordinates":"",'
+            '"confidence":0.61'
+            "}]}"
+        ),
+    )
+    db = _session()
+    try:
+        _add_evidence(
+            db,
+            "ev_empty_coordinates",
+            "Coordinate Free Electromagnetic Absorber",
+            "Electromagnetic absorber evidence with no map coordinates in the model output.",
+        )
+
+        nodes = DescriptorExtractionService().extract_for_scope(db, DEFAULT_EM_SCOPE, limit=1)
+
+        assert len(nodes) == 1
+        assert nodes[0].coordinates is None
+        assert db.query(ApplicationNodeRecord).one().payload["coordinates"] is None
+    finally:
+        db.close()
