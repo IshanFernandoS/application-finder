@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from .base import LiteratureSearchResult, LiteratureSource
 from .http import get_json
@@ -9,10 +9,20 @@ from .http import get_json
 class PubMedSource(LiteratureSource):
     source_name = "pubmed"
 
+    def __init__(self, contact_email: Optional[str] = None):
+        self.contact_email = contact_email
+
     def search(self, query: str, limit: int = 10) -> List[LiteratureSearchResult]:
         search = get_json(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-            {"db": "pubmed", "term": query, "retmode": "json", "retmax": limit},
+            {
+                "db": "pubmed",
+                "term": query,
+                "retmode": "json",
+                "retmax": limit,
+                "tool": "ApplicationFinder",
+                "email": self.contact_email,
+            },
         )
         ids = search.get("esearchresult", {}).get("idlist", [])
         if not ids:

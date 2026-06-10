@@ -3,11 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
+from ..schemas import LiteratureIngestRequest, LiteratureSearchRequest
 from ..services.descriptor_extraction_service import DescriptorExtractionService
 from ..services.ingestion_service import IngestionService
 from ..services.object_storage_service import ObjectStorageService
@@ -52,9 +53,24 @@ def ingest_zotero(db: Session = Depends(get_db)):
 
 
 @router.post("/public-search")
-def public_search(query: str, limit: int = 10):
+def public_search(request: LiteratureSearchRequest | None = Body(default=None), query: str = "", limit: int = 10):
     try:
+        if request:
+            query = request.query
+            limit = request.limit
+        if not query.strip():
+            raise HTTPException(status_code=400, detail="Search query is required.")
         return IngestionService().public_search(query, limit=limit)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise_http(exc)
+
+
+@router.post("/public-search/ingest")
+def ingest_public_search(request: LiteratureIngestRequest, db: Session = Depends(get_db)):
+    try:
+        return IngestionService().ingest_public_results(db, request.results)
     except Exception as exc:
         raise_http(exc)
 

@@ -24,6 +24,29 @@ export interface EvidenceChunk {
   relevance_score: number;
 }
 
+export interface LiteratureResult {
+  title: string;
+  authors: string[];
+  year?: number;
+  doi?: string;
+  url?: string;
+  source: string;
+  abstract?: string;
+  extra?: Record<string, unknown>;
+}
+
+export interface IngestionStatus {
+  documents: number;
+  evidence_chunks: number;
+  application_nodes?: number;
+}
+
+export interface LiteratureIngestSummary extends IngestionStatus {
+  documents_added: number;
+  evidence_chunks_added: number;
+  skipped: number;
+}
+
 export interface ApplicationNode {
   node_id: string;
   label: string;

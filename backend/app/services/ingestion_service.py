@@ -20,7 +20,7 @@ from ..literature_sources.openalex import OpenAlexSource
 from ..literature_sources.pubmed import PubMedSource
 from ..literature_sources.semantic_scholar import SemanticScholarSource
 from ..literature_sources.zotero_import import import_zotero_file
-from ..schemas import Document, EvidenceChunk
+from ..schemas import Document, EvidenceChunk, LiteratureResult
 from .ids import stable_id
 from .object_storage_service import ObjectStorageService
 from .serialization import model_to_dict
@@ -108,17 +108,21 @@ class IngestionService:
     def public_search(self, query: str, limit: int = 10) -> List[LiteratureSearchResult]:
         if not settings.enable_online_metadata:
             return []
+        query = query.strip()
+        if not query:
+            return []
         sources = [
-            OpenAlexSource(),
-            CrossrefSource(),
+            OpenAlexSource(settings.literature_contact_email),
+            CrossrefSource(settings.literature_contact_email),
             ArxivSource(),
             SemanticScholarSource(settings.semantic_scholar_api_key),
-            PubMedSource(),
+            PubMedSource(settings.literature_contact_email),
         ]
         results: List[LiteratureSearchResult] = []
+        per_source_limit = max(1, min(25, (limit + len(sources) - 1) // len(sources)))
         for source in sources:
             try:
-                results.extend(source.search(query, limit=max(1, limit // len(sources))))
+                results.extend(source.search(query, limit=per_source_limit))
             except Exception as exc:
                 results.append(
                     LiteratureSearchResult(
@@ -131,7 +135,40 @@ class IngestionService:
                         abstract=str(exc),
                     )
                 )
-        return results[:limit]
+        return self._dedupe_results(results)[:limit]
+
+    def ingest_public_results(self, db: Session, results: List[LiteratureResult]) -> Dict[str, int]:
+        before_documents = db.query(DocumentRecord).count()
+        before_evidence = db.query(EvidenceRecord).count()
+        skipped = 0
+        for result in results:
+            title = result.title.strip()
+            if not title or title.endswith(" search failed"):
+                skipped += 1
+                continue
+            source_result = LiteratureSearchResult(
+                title=title,
+                authors=result.authors,
+                year=result.year,
+                doi=result.doi,
+                url=result.url,
+                source=result.source,
+                abstract=result.abstract,
+                extra=result.extra or {},
+            )
+            if not self._store_metadata_result(db, source_result):
+                skipped += 1
+        db.commit()
+        self._write_jsonl_backup(db)
+        after_documents = db.query(DocumentRecord).count()
+        after_evidence = db.query(EvidenceRecord).count()
+        return {
+            "documents_added": after_documents - before_documents,
+            "evidence_chunks_added": after_evidence - before_evidence,
+            "skipped": skipped,
+            "documents": after_documents,
+            "evidence_chunks": after_evidence,
+        }
 
     def status(self, db: Session) -> Dict[str, int]:
         return {
@@ -149,6 +186,8 @@ class IngestionService:
 
     def _store_metadata_result(self, db: Session, result: LiteratureSearchResult) -> bool:
         doi = normalize_doi(result.doi)
+        if doi and db.query(DocumentRecord).filter(DocumentRecord.doi == doi).first():
+            return False
         document_id = stable_id("doc", doi or result.title, result.year or "")
         if db.get(DocumentRecord, document_id):
             return False
@@ -181,7 +220,19 @@ class IngestionService:
                 metadata={"source": result.source},
             )
             db.add(EvidenceRecord(evidence_id=evidence_id, document_id=document_id, text=chunk.text, payload=model_to_dict(chunk)))
+        db.flush()
         return True
+
+    def _dedupe_results(self, results: List[LiteratureSearchResult]) -> List[LiteratureSearchResult]:
+        seen = set()
+        deduped = []
+        for result in results:
+            key = normalize_doi(result.doi) or " ".join(result.title.lower().split())
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(result)
+        return deduped
 
     def _write_jsonl_backup(self, db: Session) -> None:
         backup_path = settings.data_dir / "metadata" / "evidence_chunks.jsonl"

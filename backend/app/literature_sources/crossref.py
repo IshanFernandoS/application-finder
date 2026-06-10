@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from .base import LiteratureSearchResult, LiteratureSource
 from .http import get_json
@@ -9,8 +9,14 @@ from .http import get_json
 class CrossrefSource(LiteratureSource):
     source_name = "crossref"
 
+    def __init__(self, contact_email: Optional[str] = None):
+        self.contact_email = contact_email
+
     def search(self, query: str, limit: int = 10) -> List[LiteratureSearchResult]:
-        data = get_json("https://api.crossref.org/works", {"query": query, "rows": limit})
+        headers = {}
+        if self.contact_email:
+            headers["User-Agent"] = f"ApplicationFinder/0.1 (mailto:{self.contact_email})"
+        data = get_json("https://api.crossref.org/works", {"query": query, "rows": limit}, headers=headers)
         results: List[LiteratureSearchResult] = []
         for item in data.get("message", {}).get("items", []):
             author_names = []

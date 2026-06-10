@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from .base import LiteratureSearchResult, LiteratureSource
 from .http import get_json
@@ -9,8 +9,14 @@ from .http import get_json
 class OpenAlexSource(LiteratureSource):
     source_name = "openalex"
 
+    def __init__(self, contact_email: Optional[str] = None):
+        self.contact_email = contact_email
+
     def search(self, query: str, limit: int = 10) -> List[LiteratureSearchResult]:
-        data = get_json("https://api.openalex.org/works", {"search": query, "per-page": limit})
+        data = get_json(
+            "https://api.openalex.org/works",
+            {"search": query, "per-page": limit, "mailto": self.contact_email},
+        )
         results: List[LiteratureSearchResult] = []
         for item in data.get("results", []):
             authors = [

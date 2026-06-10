@@ -39,6 +39,7 @@ class Settings:
     openai_embedding_model: str
     semantic_scholar_api_key: Optional[str]
     unpaywall_email: str
+    literature_contact_email: str
     data_dir: Path
     output_dir: Path
     database_url: str
@@ -103,6 +104,8 @@ class Settings:
             openai_embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large"),
             semantic_scholar_api_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY") or None,
             unpaywall_email=os.getenv("UNPAYWALL_EMAIL", "h.i.s.fernando@qmul.ac.uk"),
+            literature_contact_email=os.getenv("LITERATURE_CONTACT_EMAIL")
+            or os.getenv("UNPAYWALL_EMAIL", "h.i.s.fernando@qmul.ac.uk"),
             data_dir=(ROOT_DIR / data_dir).resolve() if not data_dir.is_absolute() else data_dir,
             output_dir=(ROOT_DIR / output_dir).resolve() if not output_dir.is_absolute() else output_dir,
             database_url=os.getenv("DATABASE_URL", "sqlite:///data/gap2material_em.db"),

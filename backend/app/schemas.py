@@ -76,6 +76,26 @@ class EvidenceChunk(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+class LiteratureResult(BaseModel):
+    title: str
+    authors: List[str] = Field(default_factory=list)
+    year: Optional[int] = None
+    doi: Optional[str] = None
+    url: Optional[str] = None
+    source: str
+    abstract: Optional[str] = None
+    extra: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LiteratureSearchRequest(BaseModel):
+    query: str
+    limit: int = 20
+
+
+class LiteratureIngestRequest(BaseModel):
+    results: List[LiteratureResult]
+
+
 class ApplicationNode(BaseModel):
     node_id: str
     label: str

@@ -33,6 +33,8 @@ services:
         value: text-embedding-3-large
       - key: ENABLE_ONLINE_METADATA
         value: "true"
+      - key: LITERATURE_CONTACT_EMAIL
+        value: h.i.s.fernando@qmul.ac.uk
       - key: ENABLE_OPENAI_REASONING
         value: "true"
       - key: ENABLE_MATTERGEN
@@ -44,7 +46,7 @@ services:
       - key: MATTERGEN_API_KEY
         sync: false
       - key: HPC_ENABLED
-        value: "false"
+        value: "true"
       - key: HPC_MODE
         value: slurm_ssh
       - key: HPC_HOST
@@ -56,13 +58,13 @@ services:
       - key: HPC_WORKDIR
         sync: false
       - key: HPC_SLURM_PARTITION
-        sync: false
+        value: gpushort
       - key: HPC_SLURM_ACCOUNT
         sync: false
       - key: HPC_GPU_REQUEST
-        sync: false
+        value: gpu:1
       - key: HPC_TIME_LIMIT
-        value: "04:00:00"
+        value: "01:00:00"
       - key: HPC_CPUS_PER_TASK
         value: "8"
       - key: HPC_MEM
