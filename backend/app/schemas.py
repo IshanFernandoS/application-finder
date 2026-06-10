@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class EvidenceSupport(str, Enum):
@@ -105,6 +105,26 @@ class DescriptorExtractionRequest(BaseModel):
     evidence_ids: List[str] = Field(default_factory=list)
 
 
+def coerce_string_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        separators = ("\n", ";", "|")
+        if any(separator in text for separator in separators):
+            parts = [part.strip(" -\t\r\n") for part in text.replace("|", "\n").replace(";", "\n").splitlines()]
+            return [part for part in parts if part]
+        return [text]
+    if isinstance(value, (list, tuple, set)):
+        items: List[str] = []
+        for item in value:
+            items.extend(coerce_string_list(item))
+        return items
+    return [str(value)]
+
+
 class ApplicationNode(BaseModel):
     node_id: str
     label: str
@@ -129,6 +149,18 @@ class ApplicationNode(BaseModel):
     coordinates: Optional[List[float]] = None
     cluster_id: Optional[str] = None
     evidence_count: int = 0
+
+    @field_validator(
+        "material_names",
+        "em_property_requirements",
+        "non_em_constraints",
+        "source_ids",
+        "evidence_ids",
+        mode="before",
+    )
+    @classmethod
+    def coerce_string_lists(cls, value: Any) -> List[str]:
+        return coerce_string_list(value)
 
 
 class ApplicationCluster(BaseModel):

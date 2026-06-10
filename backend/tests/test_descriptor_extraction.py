@@ -196,3 +196,39 @@ def test_descriptor_extraction_accepts_nodes_key_and_fills_defaults(monkeypatch)
         assert db.query(ApplicationNodeRecord).one().scope_id == DEFAULT_EM_SCOPE.scope_id
     finally:
         db.close()
+
+
+def test_descriptor_extraction_normalizes_scalar_list_fields(monkeypatch):
+    _configure_fake_openai(
+        monkeypatch,
+        (
+            '{"application_nodes":[{'
+            '"label":"X-ray stable electromagnetic absorber",'
+            '"application_text":"A stable electromagnetic absorber descriptor.",'
+            '"domain":"absorbers",'
+            '"function":"electromagnetic absorption control",'
+            '"material_names":null,'
+            '"em_property_requirements":"distinct and measurable permittivity under X-ray exposure",'
+            '"non_em_constraints":"algorithmic stability for inverse design; computational efficiency",'
+            '"confidence":0.67'
+            "}]}"
+        ),
+    )
+    db = _session()
+    try:
+        _add_evidence(
+            db,
+            "ev_scalar_lists",
+            "X-ray stable electromagnetic absorber",
+            "An electromagnetic absorber descriptor with measurable permittivity and validation constraints.",
+        )
+
+        nodes = DescriptorExtractionService().extract_for_scope(db, DEFAULT_EM_SCOPE, limit=1)
+
+        assert len(nodes) == 1
+        assert nodes[0].material_names == []
+        assert nodes[0].em_property_requirements == ["distinct and measurable permittivity under X-ray exposure"]
+        assert nodes[0].non_em_constraints == ["algorithmic stability for inverse design", "computational efficiency"]
+        assert db.query(ApplicationNodeRecord).count() == 1
+    finally:
+        db.close()
