@@ -46,7 +46,7 @@ Important variables:
 - `DATABASE_URL`: defaults to SQLite at `data/gap2material_em.db`.
 - `MATTERGEN_PATH`, `MATTERGEN_WORKER_URL`, `MATTERGEN_API_KEY`: MatterGen local/remote worker settings.
 - `HPC_ENABLED`, `HPC_MODE`, `HPC_HOST`, `HPC_USERNAME`, `HPC_SSH_KEY_PATH`, `HPC_WORKDIR`: optional admin-only SSH/Slurm compute worker settings.
-- `ADMIN_API_KEY`: required for analytics endpoints.
+- `ADMIN_API_KEY`: required for analytics/admin endpoints. On Vercel, set it as a server-side environment variable for the frontend admin proxy; do not expose it as `NEXT_PUBLIC_*`.
 
 Do not automate university logins, publisher logins, cookie reuse, proxy logins, credential storage, paywall bypassing, or paywalled scraping. Put legally accessible PDFs into `data/pdfs/`.
 

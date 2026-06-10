@@ -5,10 +5,9 @@ import { AlertTriangle, CheckCircle2, ClipboardList, Download, FlaskConical, Pla
 import type { HPCCheckResult, HPCJob, HPCStatus } from "@/lib/types";
 import { StatusBadge } from "./StatusBadge";
 
-const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || "http://localhost:8000";
+const adminProxyBase = "/api/backend";
 
 export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialStatus?: HPCStatus; initialJobs?: HPCJob[] }) {
-  const [adminKey, setAdminKey] = useState("");
   const [status, setStatus] = useState<HPCStatus | undefined>(initialStatus);
   const [jobs, setJobs] = useState<HPCJob[]>(initialJobs);
   const [check, setCheck] = useState<HPCCheckResult | undefined>();
@@ -19,11 +18,10 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
 
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     setError(undefined);
-    const response = await fetch(`${baseUrl}/api${path}`, {
+    const response = await fetch(`${adminProxyBase}${path}`, {
       ...init,
       headers: {
         "content-type": "application/json",
-        "x-admin-api-key": adminKey,
         ...(init?.headers || {})
       }
     });
@@ -123,17 +121,7 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
       </section>
 
       <section className="panel p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Admin key</span>
-            <input
-              className="focus-ring w-[min(520px,80vw)] rounded border border-line bg-shell px-3 py-2"
-              type="password"
-              value={adminKey}
-              onChange={(event) => setAdminKey(event.target.value)}
-              placeholder="Required for HPC actions"
-            />
-          </label>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             <Action icon={Shield} label="Check HPC connection" busy={busy === "connection"} onClick={() => runCheck("connection")} />
             <Action icon={Terminal} label="Check Slurm" busy={busy === "slurm"} onClick={() => runCheck("slurm")} />
