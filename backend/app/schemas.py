@@ -372,6 +372,7 @@ class HPCStatus(BaseModel):
     enabled: bool
     configured: bool
     mode: str
+    queue_only: bool = False
     safe_authentication: bool
     host_configured: bool
     username_configured: bool

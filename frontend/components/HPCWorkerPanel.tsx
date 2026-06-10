@@ -15,6 +15,7 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
   const [error, setError] = useState<string | undefined>();
 
   const latestJob = useMemo(() => jobs[0], [jobs]);
+  const queueOnly = Boolean(status?.queue_only);
 
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     setError(undefined);
@@ -94,7 +95,9 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
           <div>
             <h1 className="text-2xl font-semibold">HPC Worker</h1>
             <p className="mt-1 max-w-3xl text-sm text-muted">
-              SSH/Slurm compute worker for MatterGen generation, validation, indexing, PDF processing, and future DFT or EM simulation workflows.
+              {queueOnly
+                ? "Queued site submissions are relayed to Slurm by the local Mac worker, keeping personal SSH credentials off Render."
+                : "SSH/Slurm compute worker for MatterGen generation, validation, indexing, PDF processing, and future DFT or EM simulation workflows."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -104,10 +107,19 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-4">
           <State label="Worker enabled" ok={status?.enabled} />
-          <State label="Safe SSH auth" ok={status?.safe_authentication} />
+          <State label={queueOnly ? "Relay mode" : "Safe SSH auth"} ok={queueOnly || status?.safe_authentication} detail={queueOnly ? "Render queues jobs" : undefined} />
           <State label="Slurm mode" ok={status?.scheduler_configured} />
           <State label="MatterGen env" ok={status?.mattergen_hpc_env_configured} />
         </div>
+        {queueOnly ? (
+          <div className="mt-4 rounded border border-teal/40 bg-teal/10 p-4 text-sm">
+            <div className="font-medium text-ink">How site submission works</div>
+            <p className="mt-2 text-muted">
+              The website creates queued jobs on Render. A local relay running on your Mac submits them to QMUL Slurm, polls status, retrieves outputs, and syncs results back here.
+            </p>
+            <pre className="mt-3 overflow-auto rounded bg-shell p-3 text-xs text-muted">scripts/hpc/start_control_master.sh{"\n"}scripts/hpc/start_local_relay.sh</pre>
+          </div>
+        ) : null}
         {status?.warnings?.length ? (
           <div className="mt-4 grid gap-2">
             {status.warnings.map((warning) => (
@@ -123,13 +135,22 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
       <section className="panel p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
-            <Action icon={Shield} label="Check HPC connection" busy={busy === "connection"} onClick={() => runCheck("connection")} />
-            <Action icon={Terminal} label="Check Slurm" busy={busy === "slurm"} onClick={() => runCheck("slurm")} />
-            <Action icon={FlaskConical} label="Check MatterGen environment" busy={busy === "mattergen"} onClick={() => runCheck("mattergen")} />
-            <Action icon={Play} label="Submit test job" busy={busy === "submit"} onClick={submitTestJob} />
+            {queueOnly ? null : (
+              <>
+                <Action icon={Shield} label="Check HPC connection" busy={busy === "connection"} onClick={() => runCheck("connection")} />
+                <Action icon={Terminal} label="Check Slurm" busy={busy === "slurm"} onClick={() => runCheck("slurm")} />
+                <Action icon={FlaskConical} label="Check MatterGen environment" busy={busy === "mattergen"} onClick={() => runCheck("mattergen")} />
+              </>
+            )}
+            <Action icon={Play} label={queueOnly ? "Queue test job" : "Submit test job"} busy={busy === "submit"} onClick={submitTestJob} />
             <Action icon={RefreshCw} label="Refresh" busy={busy === "refresh"} onClick={refreshJobs} />
           </div>
         </div>
+        {queueOnly ? (
+          <div className="mt-4 rounded border border-line bg-shell p-4 text-sm text-muted">
+            Direct Render-to-HPC SSH checks are intentionally skipped in relay mode because Render does not store SSH credentials. Use the local relay commands above, then refresh this page to watch queued jobs move to Slurm.
+          </div>
+        ) : null}
         {check ? (
           <div className="mt-4 rounded border border-line bg-shell p-4 text-sm">
             <div className="flex items-center gap-2 font-medium">
@@ -185,13 +206,13 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
   );
 }
 
-function State({ label, ok }: { label: string; ok?: boolean }) {
+function State({ label, ok, detail }: { label: string; ok?: boolean; detail?: string }) {
   return (
     <div className="rounded border border-line bg-shell p-3 text-sm">
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-2 flex items-center gap-2 font-medium">
         {ok ? <CheckCircle2 className="h-4 w-4 text-teal" aria-hidden /> : <AlertTriangle className="h-4 w-4 text-amber" aria-hidden />}
-        {ok ? "Ready" : "Needs setup"}
+        {detail || (ok ? "Ready" : "Needs setup")}
       </div>
     </div>
   );

@@ -48,6 +48,7 @@ class HPCWorkerService:
             enabled=settings.hpc_enabled,
             configured=settings.hpc_configured,
             mode=settings.hpc_mode,
+            queue_only=settings.hpc_queue_only,
             safe_authentication=safe_auth,
             host_configured=bool(settings.hpc_host),
             username_configured=bool(settings.hpc_username),

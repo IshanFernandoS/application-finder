@@ -226,6 +226,7 @@ export interface HPCStatus {
   enabled: boolean;
   configured: boolean;
   mode: string;
+  queue_only?: boolean;
   safe_authentication: boolean;
   host_configured: boolean;
   username_configured: boolean;
