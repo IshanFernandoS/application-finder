@@ -142,13 +142,18 @@ export function HPCWorkerPanel({ initialStatus, initialJobs = [] }: { initialSta
                 <Action icon={FlaskConical} label="Check MatterGen environment" busy={busy === "mattergen"} onClick={() => runCheck("mattergen")} />
               </>
             )}
-            <Action icon={Play} label={queueOnly ? "Queue test job" : "Submit test job"} busy={busy === "submit"} onClick={submitTestJob} />
+            <Action icon={Play} label={queueOnly ? "Queue relay check" : "Submit scheduler check"} busy={busy === "submit"} onClick={submitTestJob} />
             <Action icon={RefreshCw} label="Refresh" busy={busy === "refresh"} onClick={refreshJobs} />
           </div>
         </div>
         {queueOnly ? (
-          <div className="mt-4 rounded border border-line bg-shell p-4 text-sm text-muted">
-            Direct Render-to-HPC SSH checks are intentionally skipped in relay mode because Render does not store SSH credentials. Use the local relay commands above, then refresh this page to watch queued jobs move to Slurm.
+          <div className="mt-4 grid gap-3 rounded border border-line bg-shell p-4 text-sm text-muted">
+            <p>
+              Direct Render-to-HPC SSH checks are intentionally skipped in relay mode because Render does not store SSH credentials. Use the local relay commands above, then refresh this page to watch queued jobs move to Slurm.
+            </p>
+            <p>
+              Real MatterGen generation starts from a pathway page: generate an FBS-PM pathway, then click Run MatterGen on HPC. This page monitors the queue, logs, retrieved files, and candidates.
+            </p>
           </div>
         ) : null}
         {check ? (
