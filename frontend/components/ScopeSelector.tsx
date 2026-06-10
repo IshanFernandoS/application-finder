@@ -14,10 +14,10 @@ export function ScopeSelector() {
   }, []);
 
   return (
-    <label className="relative block">
+    <label className="relative block min-w-0">
       <span className="sr-only">Scope</span>
       <select
-        className="focus-ring h-10 min-w-72 appearance-none rounded border border-line bg-panel px-3 pr-9 text-sm"
+        className="focus-ring h-10 w-full min-w-0 appearance-none truncate rounded border border-line bg-panel px-3 pr-9 text-sm lg:min-w-72"
         value={selected}
         onChange={(event) => setSelected(event.target.value)}
       >

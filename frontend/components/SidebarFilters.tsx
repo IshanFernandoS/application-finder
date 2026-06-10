@@ -48,7 +48,7 @@ export function SidebarFilters({
   }
 
   return (
-    <aside className="panel p-4">
+    <aside className="panel min-w-0 p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <SlidersHorizontal className="h-4 w-4 text-accent" aria-hidden />
@@ -100,7 +100,7 @@ function FilterSelect({
     <label className="grid gap-1 text-xs text-muted">
       {label}
       <select
-        className="focus-ring h-9 rounded border border-line bg-shell px-2 text-sm text-ink"
+        className="focus-ring h-9 w-full min-w-0 rounded border border-line bg-shell px-2 text-sm text-ink"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >

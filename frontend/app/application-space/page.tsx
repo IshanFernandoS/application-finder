@@ -5,6 +5,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { apiGet } from "@/lib/api";
 import type { ApplicationSpace } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export default async function ApplicationSpacePage() {
   const space = await apiGet<ApplicationSpace>("/application-space").catch(() => undefined);
   return (

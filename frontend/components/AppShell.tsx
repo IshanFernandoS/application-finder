@@ -65,9 +65,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-line bg-panel px-6">
+        <header className="flex min-h-16 items-center justify-between gap-4 border-b border-line bg-panel px-6 py-3 max-lg:flex-col max-lg:items-stretch max-lg:px-4">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-muted">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
               <span>Electromagnetic Application Space</span>
               <span>/</span>
               <span>Gap</span>
@@ -85,7 +85,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <ScopeSelector />
         </header>
-        <main className="min-w-0 flex-1 p-6">{children}</main>
+        <nav className="hidden gap-2 overflow-x-auto border-b border-line bg-panel px-4 py-2 max-lg:flex">
+          {nav.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`focus-ring inline-flex shrink-0 items-center gap-2 rounded px-3 py-2 text-xs ${
+                  active ? "bg-accent text-white" : "text-muted hover:bg-shell hover:text-ink"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <main className="min-w-0 flex-1 p-6 max-lg:p-3">{children}</main>
       </div>
     </div>
   );
