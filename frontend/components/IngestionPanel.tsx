@@ -29,9 +29,10 @@ export function IngestionPanel() {
   }
 
   async function searchLiterature() {
+    const params = new URLSearchParams({ query: query.trim(), limit: String(limit) });
     await runAction(
       "search",
-      () => apiPost<LiteratureResult[]>("/ingest/public-search", { query, limit }),
+      () => apiPost<LiteratureResult[]>(`/ingest/public-search?${params.toString()}`),
       (items) => {
         setResults(items);
         setSelected(new Set(items.filter((item) => !isFailure(item)).slice(0, 8).map(resultKey)));
