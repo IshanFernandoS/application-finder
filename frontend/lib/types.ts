@@ -31,8 +31,8 @@ export interface LiteratureResult {
   doi?: string;
   url?: string;
   source: string;
-  abstract?: string;
-  extra?: Record<string, unknown>;
+  abstract?: string | null;
+  extra?: Record<string, unknown> | null;
 }
 
 export interface IngestionStatus {
@@ -45,6 +45,12 @@ export interface LiteratureIngestSummary extends IngestionStatus {
   documents_added: number;
   evidence_chunks_added: number;
   skipped: number;
+}
+
+export interface LiteratureIngestAndExtractSummary {
+  ingestion: LiteratureIngestSummary;
+  evidence_ids: string[];
+  application_nodes: ApplicationNode[];
 }
 
 export interface ApplicationNode {

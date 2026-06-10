@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..schemas import LiteratureIngestRequest, LiteratureSearchRequest
+from ..schemas import DescriptorExtractionRequest, LiteratureIngestAndExtractRequest, LiteratureIngestRequest, LiteratureSearchRequest
 from ..services.descriptor_extraction_service import DescriptorExtractionService
 from ..services.ingestion_service import IngestionService
 from ..services.object_storage_service import ObjectStorageService
@@ -75,15 +75,45 @@ def ingest_public_search(request: LiteratureIngestRequest, db: Session = Depends
         raise_http(exc)
 
 
+@router.post("/public-search/ingest-and-extract")
+def ingest_public_search_and_extract(request: LiteratureIngestAndExtractRequest, db: Session = Depends(get_db)):
+    try:
+        ingestion_service = IngestionService()
+        ingestion = ingestion_service.ingest_public_results(db, request.results)
+        evidence_ids = ingestion_service.evidence_ids_for_public_results(db, request.results)
+        if not evidence_ids:
+            return {"ingestion": ingestion, "evidence_ids": [], "application_nodes": []}
+        scope = ScopeService().get_scope(db, request.scope_id)
+        nodes = DescriptorExtractionService().extract_for_scope(
+            db,
+            scope,
+            limit=max(1, min(request.limit, len(evidence_ids))),
+            evidence_ids=evidence_ids,
+        )
+        return {"ingestion": ingestion, "evidence_ids": evidence_ids, "application_nodes": nodes}
+    except Exception as exc:
+        raise_http(exc)
+
+
 @router.get("/status")
 def ingest_status(db: Session = Depends(get_db)):
     return IngestionService().status(db)
 
 
 @router.post("/extract-descriptors")
-def extract_descriptors(scope_id: str = "electromagnetic_functional_materials", limit: int = 50, db: Session = Depends(get_db)):
+def extract_descriptors(
+    request: DescriptorExtractionRequest | None = Body(default=None),
+    scope_id: str = "electromagnetic_functional_materials",
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
     try:
         scope = ScopeService().get_scope(db, scope_id)
-        return DescriptorExtractionService().extract_for_scope(db, scope, limit=limit)
+        return DescriptorExtractionService().extract_for_scope(
+            db,
+            scope,
+            limit=limit,
+            evidence_ids=request.evidence_ids if request else None,
+        )
     except Exception as exc:
         raise_http(exc)

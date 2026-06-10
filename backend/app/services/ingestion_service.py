@@ -170,6 +170,21 @@ class IngestionService:
             "evidence_chunks": after_evidence,
         }
 
+    def evidence_ids_for_public_results(self, db: Session, results: List[LiteratureResult]) -> List[str]:
+        evidence_ids: List[str] = []
+        for result in results:
+            title = result.title.strip()
+            if not title or title.endswith(" search failed"):
+                continue
+            doi = normalize_doi(result.doi)
+            existing = db.query(DocumentRecord).filter(DocumentRecord.doi == doi).first() if doi else None
+            document_id = existing.document_id if existing else stable_id("doc", doi or title, result.year or "")
+            section = "abstract" if (result.abstract or "").strip() else "metadata"
+            evidence_id = stable_id("ev", document_id, section)
+            if db.get(EvidenceRecord, evidence_id):
+                evidence_ids.append(evidence_id)
+        return evidence_ids
+
     def status(self, db: Session) -> Dict[str, int]:
         return {
             "documents": db.query(DocumentRecord).count(),

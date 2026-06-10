@@ -111,6 +111,34 @@ def test_descriptor_fallback_prefers_specific_domain_over_generic_em_term(monkey
         db.close()
 
 
+def test_descriptor_extraction_can_filter_to_selected_evidence(monkeypatch):
+    fake_completions = _configure_fake_openai(monkeypatch, '{"application_nodes":[]}')
+    db = _session()
+    try:
+        _add_evidence(
+            db,
+            "ev_selected",
+            "Selected Electromagnetic Metamaterial Paper",
+            "Selected electromagnetic metamaterial evidence.",
+            section="metadata",
+        )
+        _add_evidence(
+            db,
+            "ev_other",
+            "Other Electromagnetic Absorber Paper",
+            "Other electromagnetic absorber evidence that should not be extracted.",
+            section="metadata",
+        )
+
+        nodes = DescriptorExtractionService().extract_for_scope(db, DEFAULT_EM_SCOPE, limit=10, evidence_ids=["ev_selected"])
+
+        assert len(nodes) == 1
+        assert nodes[0].evidence_ids == ["ev_selected"]
+        assert len(fake_completions.calls) == 1
+    finally:
+        db.close()
+
+
 def test_descriptor_extraction_accepts_nodes_key_and_fills_defaults(monkeypatch):
     _configure_fake_openai(
         monkeypatch,

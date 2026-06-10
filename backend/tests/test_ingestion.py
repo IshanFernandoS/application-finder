@@ -98,6 +98,7 @@ def test_public_literature_ingest_creates_metadata_evidence_without_abstract(tmp
                     doi="10.1000/noabstract",
                     url="https://example.test/no-abstract",
                     source="openalex",
+                    extra=None,
                 )
             ],
         )
@@ -109,6 +110,20 @@ def test_public_literature_ingest_creates_metadata_evidence_without_abstract(tmp
         assert chunk.payload["metadata"]["metadata_only"] is True
         assert "No abstract was available" in chunk.text
         assert "Metadata Only Electromagnetic Materials Paper" in chunk.text
+        assert IngestionService().evidence_ids_for_public_results(
+            db,
+            [
+                LiteratureResult(
+                    title="Metadata Only Electromagnetic Materials Paper",
+                    authors=["A. Researcher", "B. Scientist"],
+                    year=2024,
+                    doi="10.1000/noabstract",
+                    url="https://example.test/no-abstract",
+                    source="openalex",
+                    extra=None,
+                )
+            ],
+        ) == [chunk.evidence_id]
     finally:
         db.close()
 

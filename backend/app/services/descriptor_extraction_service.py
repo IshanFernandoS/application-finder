@@ -39,7 +39,9 @@ class DescriptorExtractionService:
         "radome",
     )
 
-    def extract_for_scope(self, db: Session, scope: Scope, limit: int = 50) -> List[ApplicationNode]:
+    def extract_for_scope(
+        self, db: Session, scope: Scope, limit: int = 50, evidence_ids: List[str] | None = None
+    ) -> List[ApplicationNode]:
         if not settings.openai_api_key or not settings.enable_openai_reasoning:
             raise ConfigurationError("Descriptor extraction requires ENABLE_OPENAI_REASONING=true and OPENAI_API_KEY.")
         try:
@@ -48,7 +50,10 @@ class DescriptorExtractionService:
             raise DependencyUnavailableError("Install the OpenAI Python SDK to run descriptor extraction.") from exc
 
         client = OpenAI(api_key=settings.openai_api_key)
-        chunks = db.query(EvidenceRecord).order_by(func.length(EvidenceRecord.text).desc()).limit(limit).all()
+        query = db.query(EvidenceRecord)
+        if evidence_ids:
+            query = query.filter(EvidenceRecord.evidence_id.in_(evidence_ids))
+        chunks = query.order_by(func.length(EvidenceRecord.text).desc()).limit(limit).all()
         nodes: List[ApplicationNode] = []
         field_source = getattr(ApplicationNode, "model_fields", None) or ApplicationNode.__fields__
         field_names = list(field_source.keys())

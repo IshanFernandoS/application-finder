@@ -84,7 +84,7 @@ class LiteratureResult(BaseModel):
     url: Optional[str] = None
     source: str
     abstract: Optional[str] = None
-    extra: Dict[str, Any] = Field(default_factory=dict)
+    extra: Optional[Dict[str, Any]] = None
 
 
 class LiteratureSearchRequest(BaseModel):
@@ -94,6 +94,15 @@ class LiteratureSearchRequest(BaseModel):
 
 class LiteratureIngestRequest(BaseModel):
     results: List[LiteratureResult]
+
+
+class LiteratureIngestAndExtractRequest(LiteratureIngestRequest):
+    scope_id: str = "electromagnetic_functional_materials"
+    limit: int = 50
+
+
+class DescriptorExtractionRequest(BaseModel):
+    evidence_ids: List[str] = Field(default_factory=list)
 
 
 class ApplicationNode(BaseModel):

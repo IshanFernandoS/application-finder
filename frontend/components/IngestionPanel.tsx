@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckSquare, ExternalLink, Loader2, PlusCircle, Search, Square, UploadCloud } from "lucide-react";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
-import type { ApplicationNode, IngestionStatus, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
+import type { ApplicationNode, IngestionStatus, LiteratureIngestAndExtractSummary, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
 
 export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionStatus }) {
   const [query, setQuery] = useState("electromagnetic metamaterial inverse design high permittivity low loss");
@@ -35,28 +35,48 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
       "search",
       () => apiPost<LiteratureResult[]>(`/ingest/public-search?${params.toString()}`),
       (items) => {
-        setResults(items);
-        setSelected(new Set(items.filter((item) => !isFailure(item)).slice(0, 8).map(resultKey)));
-        setMessage(`${items.length} papers found`);
+        const normalized = items.map(normalizeLiteratureResult);
+        setResults(normalized);
+        setSelected(new Set(normalized.filter((item) => !isFailure(item)).slice(0, 8).map(resultKey)));
+        setMessage(`${normalized.length} papers found`);
       }
     );
   }
 
-  async function ingestSelected() {
-    const selectedResults = results.filter((item) => selected.has(resultKey(item)) && !isFailure(item));
+  async function ingestSelected(extractDescriptors = false) {
+    const selectedResults = selectedLiteratureResults(results, selected);
+    const actionName = extractDescriptors ? "ingest-extract-selected" : "ingest-selected";
     await runAction(
-      "ingest-selected",
-      () => ingestResults(selectedResults),
-      (summary) => {
-        setMessage(`${summary.documents_added} papers and ${summary.evidence_chunks_added} evidence chunks added`);
-        setStatus({ documents: summary.documents, evidence_chunks: summary.evidence_chunks, application_nodes: status?.application_nodes });
+      actionName,
+      async () => {
+        const directResult = extractDescriptors ? await ingestAndExtractResults(selectedResults) : undefined;
+        const summary = directResult?.ingestion || (await ingestResults(selectedResults));
+        const nodes = directResult?.application_nodes || [];
+        const latestStatus = await apiGet<IngestionStatus>("/ingest/status").catch(() => undefined);
+        return { summary, nodes, latestStatus };
+      },
+      ({ summary, nodes, latestStatus }) => {
+        setMessage(
+          extractDescriptors
+            ? `${summary.documents_added} papers ingested; ${nodes.length} descriptors extracted`
+            : `${summary.documents_added} papers and ${summary.evidence_chunks_added} evidence chunks added`
+        );
+        setStatus(
+          latestStatus || {
+            documents: summary.documents,
+            evidence_chunks: summary.evidence_chunks,
+            application_nodes: status?.application_nodes
+          }
+        );
         setSelected(new Set());
       }
     );
   }
 
   async function refreshStatus() {
-    setStatus(await apiGet<IngestionStatus>("/ingest/status"));
+    const nextStatus = await apiGet<IngestionStatus>("/ingest/status");
+    setStatus(nextStatus);
+    return nextStatus;
   }
 
   function toggleResult(item: LiteratureResult) {
@@ -72,7 +92,8 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
     });
   }
 
-  const selectedCount = selected.size;
+  const selectedCount = selectedLiteratureResults(results, selected).length;
+  const selectableCount = results.filter((item) => !isFailure(item)).length;
 
   return (
     <section className="panel grid gap-5 p-5">
@@ -157,7 +178,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
           </label>
           <button
             className="focus-ring inline-flex items-center justify-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 lg:self-end"
-            disabled={busy === "search" || !query.trim()}
+            disabled={Boolean(busy) || !query.trim()}
             type="submit"
           >
             {busy === "search" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Search className="h-4 w-4" aria-hidden />}
@@ -166,16 +187,45 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
         </div>
         {results.length ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-muted">{selectedCount} selected</div>
-            <button
-              className="focus-ring inline-flex items-center gap-2 rounded border border-line px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={busy === "ingest-selected" || selectedCount === 0}
-              onClick={() => void ingestSelected()}
-              type="button"
-            >
-              {busy === "ingest-selected" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlusCircle className="h-4 w-4" aria-hidden />}
-              Ingest selected
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-sm text-muted">{selectedCount} selected</div>
+              <button
+                className="focus-ring rounded border border-line px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={Boolean(busy) || selectableCount === 0}
+                onClick={() => setSelected(new Set(results.filter((item) => !isFailure(item)).map(resultKey)))}
+                type="button"
+              >
+                Select all
+              </button>
+              <button
+                className="focus-ring rounded border border-line px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={Boolean(busy) || selectedCount === 0}
+                onClick={() => setSelected(new Set())}
+                type="button"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="focus-ring inline-flex items-center gap-2 rounded border border-line px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={Boolean(busy) || selectedCount === 0}
+                onClick={() => void ingestSelected(false)}
+                type="button"
+              >
+                {busy === "ingest-selected" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlusCircle className="h-4 w-4" aria-hidden />}
+                Ingest selected
+              </button>
+              <button
+                className="focus-ring inline-flex items-center gap-2 rounded bg-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={Boolean(busy) || selectedCount === 0}
+                onClick={() => void ingestSelected(true)}
+                type="button"
+              >
+                {busy === "ingest-extract-selected" ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <PlusCircle className="h-4 w-4" aria-hidden />}
+                Ingest + extract descriptors
+              </button>
+            </div>
           </div>
         ) : null}
       </form>
@@ -245,6 +295,23 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function selectedLiteratureResults(results: LiteratureResult[], selected: Set<string>) {
+  return results.filter((item) => selected.has(resultKey(item)) && !isFailure(item)).map(normalizeLiteratureResult);
+}
+
+function normalizeLiteratureResult(item: LiteratureResult): LiteratureResult {
+  return {
+    ...item,
+    authors: Array.isArray(item.authors) ? item.authors : [],
+    abstract: item.abstract || undefined,
+    extra: item.extra && typeof item.extra === "object" && !Array.isArray(item.extra) ? item.extra : {}
+  };
+}
+
+function descriptorLimit(results: LiteratureResult[]) {
+  return Math.min(50, Math.max(results.length, 1));
+}
+
 function resultKey(item: LiteratureResult) {
   return `${item.source}:${item.doi || item.url || item.title}`;
 }
@@ -258,13 +325,34 @@ function stripTags(value: string) {
 }
 
 async function ingestResults(results: LiteratureResult[]) {
+  const normalizedResults = results.map(normalizeLiteratureResult);
   try {
-    return await apiPost<LiteratureIngestSummary>("/ingest/public-search/ingest", { results });
+    return await apiPost<LiteratureIngestSummary>("/ingest/public-search/ingest", { results: normalizedResults });
   } catch (exc) {
     if (!isNotFoundError(exc)) {
       throw exc;
     }
-    return ingestResultsAsEvidenceFiles(results);
+    return ingestResultsAsEvidenceFiles(normalizedResults);
+  }
+}
+
+async function ingestAndExtractResults(results: LiteratureResult[]): Promise<LiteratureIngestAndExtractSummary> {
+  const normalizedResults = results.map(normalizeLiteratureResult);
+  try {
+    return await apiPost<LiteratureIngestAndExtractSummary>("/ingest/public-search/ingest-and-extract", {
+      results: normalizedResults,
+      scope_id: "electromagnetic_functional_materials",
+      limit: descriptorLimit(normalizedResults)
+    });
+  } catch (exc) {
+    if (!isNotFoundError(exc)) {
+      throw exc;
+    }
+    const ingestion = await ingestResults(normalizedResults);
+    const application_nodes = await apiPost<ApplicationNode[]>(
+      `/ingest/extract-descriptors?scope_id=electromagnetic_functional_materials&limit=${descriptorLimit(normalizedResults)}`
+    );
+    return { ingestion, evidence_ids: [], application_nodes };
   }
 }
 
