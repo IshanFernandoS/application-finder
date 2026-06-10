@@ -90,6 +90,27 @@ def test_descriptor_extraction_falls_back_for_in_scope_empty_model_response(monk
         db.close()
 
 
+def test_descriptor_fallback_prefers_specific_domain_over_generic_em_term(monkeypatch):
+    _configure_fake_openai(monkeypatch, '{"application_nodes":[]}')
+    db = _session()
+    try:
+        _add_evidence(
+            db,
+            "ev_inverse",
+            "Deep Learning for Electromagnetic Metamaterial Inverse Design",
+            "Deep Learning for Electromagnetic Metamaterial Inverse Design\nNo abstract was available from the public metadata source.",
+            section="metadata",
+        )
+
+        nodes = DescriptorExtractionService().extract_for_scope(db, DEFAULT_EM_SCOPE, limit=1)
+
+        assert len(nodes) == 1
+        assert nodes[0].domain == "metamaterials and metasurfaces"
+        assert nodes[0].function == "inverse design of electromagnetic response"
+    finally:
+        db.close()
+
+
 def test_descriptor_extraction_accepts_nodes_key_and_fills_defaults(monkeypatch):
     _configure_fake_openai(
         monkeypatch,

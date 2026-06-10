@@ -175,9 +175,29 @@ class DescriptorExtractionService:
         }
 
     def _guess_domain(self, scope: Scope, combined: str) -> str:
+        priority_matches = (
+            (("metamaterial", "metasurface"), "metamaterials and metasurfaces"),
+            (("absorber", "absorption"), "absorbers"),
+            (("antenna",), "antennas and antenna substrates"),
+            (("shield", "emi"), "electromagnetic interference shielding"),
+            (("frequency-selective", "frequency selective"), "frequency-selective surfaces"),
+            (("radome",), "radomes"),
+            (("thermal", "emissivity"), "infrared and thermal-emissivity devices"),
+            (("photonic", "optical"), "photonic coatings"),
+            (("phase-change", "phase change"), "phase-change electromagnetic materials"),
+            (("plasmonic",), "plasmonic materials"),
+        )
+        available_domains = set(scope.included_domains)
+        for keywords, domain in priority_matches:
+            if domain in available_domains and any(keyword in combined for keyword in keywords):
+                return domain
+        generic_tokens = {"electromagnetic", "material", "materials", "device", "devices", "functional"}
         for domain in scope.included_domains:
             tokens = domain.lower().replace("/", " ").replace("-", " ").split()
-            if any(len(token) > 4 and token.rstrip("s") in combined for token in tokens):
+            if any(
+                len(token) > 4 and token not in generic_tokens and token.rstrip("s") in combined
+                for token in tokens
+            ):
                 return domain
         return scope.included_domains[0] if scope.included_domains else "electromagnetic functional materials"
 
