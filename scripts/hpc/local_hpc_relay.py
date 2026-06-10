@@ -89,8 +89,15 @@ class LocalHPCRelay:
                 job = self.slurm.submit(job, local_workdir, input_path, slurm_path)
             self.sync(job)
         except Exception as exc:
-            job.status = HPCJobStatus.failed
-            job.error = str(exc)
+            if self.is_auth_error(exc):
+                job.status = HPCJobStatus.queued
+                job.error = (
+                    "Local relay is waiting for an authenticated SSH session. "
+                    "Start scripts/hpc/start_control_master.sh, then the relay will retry this queued job."
+                )
+            else:
+                job.status = HPCJobStatus.failed
+                job.error = str(exc)
             self.sync(job)
 
     def poll_or_retrieve(self, job: HPCJob) -> None:
@@ -104,8 +111,14 @@ class LocalHPCRelay:
                 job = self.slurm.retrieve(job, local_workdir)
                 self.sync(job)
         except Exception as exc:
-            job.status = HPCJobStatus.failed
-            job.error = str(exc)
+            if self.is_auth_error(exc):
+                job.error = (
+                    "Local relay could not authenticate to HPC while polling. "
+                    "Refresh the SSH control master, then the relay will retry."
+                )
+            else:
+                job.status = HPCJobStatus.failed
+                job.error = str(exc)
             self.sync(job)
 
     def write_input(self, job: HPCJob, local_workdir: Path) -> Path:
@@ -134,6 +147,10 @@ class LocalHPCRelay:
     def local_workdir(self, job: HPCJob) -> Path:
         return ROOT / "outputs" / "hpc_jobs" / job.job_id
 
+    def is_auth_error(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return "permission denied" in message or "publickey" in message or "password" in message
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Submit Render-queued Application Finder HPC jobs from this Mac using the local SSH agent/keychain.")
@@ -148,8 +165,14 @@ def main() -> int:
         raise SystemExit("ADMIN_API_KEY is required in the environment or .env for the local HPC relay.")
 
     relay = LocalHPCRelay(RemoteAPI(args.remote_url, args.admin_key), dry_run=args.dry_run)
+    print("Application Finder local HPC relay is polling for queued jobs.", flush=True)
     while True:
-        relay.run_once()
+        try:
+            relay.run_once()
+        except Exception as exc:
+            print(f"Local HPC relay cycle failed: {exc}", file=sys.stderr, flush=True)
+            if args.once:
+                return 1
         if args.once:
             return 0
         time.sleep(args.interval)

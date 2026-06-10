@@ -252,6 +252,15 @@ ADMIN_API_KEY=... AF_REMOTE_BACKEND_URL=https://application-finder-backend.onren
   scripts/hpc/local_hpc_relay.py
 ```
 
+Convenience launchers:
+
+```bash
+scripts/hpc/start_control_master.sh
+scripts/hpc/start_local_relay.sh
+scripts/hpc/stop_local_relay.sh
+scripts/hpc/stop_control_master.sh
+```
+
 This keeps the web-app user experience non-interactive while avoiding password automation and avoiding upload of your personal SSH private key.
 
 Admin-only HPC API:
