@@ -1,5 +1,6 @@
 const defaultBackendUrl = "http://localhost:8000";
 const browserProxyBase = "/api/backend";
+const transientRetryDelaysMs = [1000, 2500, 5000];
 
 function apiUrl(path: string) {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
@@ -16,7 +17,7 @@ function absoluteUrl(value?: string) {
 }
 
 export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await fetchWithTransientRetry(apiUrl(path), {
     ...init,
     next: { revalidate: 10 },
     headers: {
@@ -25,7 +26,7 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) {
-    const detail = await response.text();
+    const detail = await errorMessage(response);
     throw new Error(detail || `API request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
@@ -33,7 +34,7 @@ export async function apiGet<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function apiPost<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
   const headers = body === undefined ? init?.headers : { "content-type": "application/json", ...(init?.headers || {}) };
-  const response = await fetch(apiUrl(path), {
+  const response = await fetchWithTransientRetry(apiUrl(path), {
     method: "POST",
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: "no-store",
@@ -41,22 +42,70 @@ export async function apiPost<T>(path: string, body?: unknown, init?: RequestIni
     headers
   });
   if (!response.ok) {
-    const detail = await response.text();
+    const detail = await errorMessage(response);
     throw new Error(detail || `API request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
 
 export async function apiUpload<T>(path: string, body: FormData, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await fetchWithTransientRetry(apiUrl(path), {
     method: "POST",
     body,
     cache: "no-store",
     ...init
   });
   if (!response.ok) {
-    const detail = await response.text();
+    const detail = await errorMessage(response);
     throw new Error(detail || `API request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+async function fetchWithTransientRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= transientRetryDelaysMs.length; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      if (!(await isRetryableBackendResponse(response)) || attempt === transientRetryDelaysMs.length) {
+        return response;
+      }
+    } catch (exc) {
+      lastError = exc;
+      if (attempt === transientRetryDelaysMs.length) {
+        throw exc;
+      }
+    }
+    await sleep(transientRetryDelaysMs[attempt]);
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError || "Backend request failed"));
+}
+
+async function isRetryableBackendResponse(response: Response) {
+  if (![502, 503, 504].includes(response.status)) {
+    return false;
+  }
+  if (response.headers.get("x-application-finder-retryable") === "true") {
+    return true;
+  }
+  try {
+    const payload = await response.clone().json() as { retryable?: unknown };
+    return payload.retryable === true;
+  } catch {
+    return false;
+  }
+}
+
+async function errorMessage(response: Response) {
+  const text = await response.text();
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown };
+    return typeof payload.detail === "string" ? payload.detail : text;
+  } catch {
+    return text;
+  }
+}
+
+function sleep(delayMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
