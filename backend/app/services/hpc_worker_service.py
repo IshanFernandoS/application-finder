@@ -38,13 +38,14 @@ class HPCWorkerService:
             warnings.append("HPC worker is disabled. Set HPC_ENABLED=true to enable admin-only SSH/Slurm actions.")
         if settings.hpc_enabled and not settings.hpc_workdir:
             warnings.append("HPC_WORKDIR is required before jobs can be submitted.")
-        if settings.hpc_enabled and not (settings.hpc_ssh_key_path or os.environ.get("SSH_AUTH_SOCK")):
-            warnings.append("Configure SSH agent forwarding or HPC_SSH_KEY_PATH. Password automation is not supported.")
+        safe_auth = bool(settings.hpc_ssh_key_path or settings.hpc_ssh_control_path or os.environ.get("SSH_AUTH_SOCK"))
+        if settings.hpc_enabled and not safe_auth:
+            warnings.append("Configure SSH agent forwarding, HPC_SSH_KEY_PATH, or HPC_SSH_CONTROL_PATH. Password automation is not supported.")
         return HPCStatus(
             enabled=settings.hpc_enabled,
             configured=settings.hpc_configured,
             mode=settings.hpc_mode,
-            safe_authentication=bool(settings.hpc_ssh_key_path or os.environ.get("SSH_AUTH_SOCK")),
+            safe_authentication=safe_auth,
             host_configured=bool(settings.hpc_host),
             username_configured=bool(settings.hpc_username),
             workdir_configured=bool(settings.hpc_workdir),

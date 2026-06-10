@@ -13,6 +13,7 @@ HPC_SSH_KEY_PATH="${HPC_SSH_KEY_PATH:-${HPC_KEY:-}}"
 HPC_WORKDIR="${HPC_WORKDIR:-${HPC_PROJECT_DIR:-}}"
 HPC_RSYNC_EXTRA_ARGS="${HPC_RSYNC_EXTRA_ARGS:-}"
 HPC_STRICT_HOST_KEY_CHECKING="${HPC_STRICT_HOST_KEY_CHECKING:-true}"
+HPC_SSH_CONTROL_PATH="${HPC_SSH_CONTROL_PATH:-}"
 
 if [ -z "$HPC_USERNAME" ] || [ -z "$HPC_WORKDIR" ]; then
   echo "Missing HPC_USERNAME or HPC_WORKDIR. Password automation is not supported." >&2
@@ -25,6 +26,9 @@ if [ "$HPC_STRICT_HOST_KEY_CHECKING" = "false" ]; then
 fi
 
 ssh_opts=(-A -o BatchMode=yes -o "StrictHostKeyChecking=${strict}")
+if [ -n "$HPC_SSH_CONTROL_PATH" ]; then
+  ssh_opts+=(-o ControlMaster=auto -o ControlPersist=10m -o "ControlPath=${HPC_SSH_CONTROL_PATH}")
+fi
 if [ -n "$HPC_SSH_KEY_PATH" ]; then
   ssh_opts+=(-i "$HPC_SSH_KEY_PATH")
 fi

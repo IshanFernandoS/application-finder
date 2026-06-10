@@ -231,7 +231,16 @@ HPC_MATTERGEN_ENV=
 HPC_RSYNC_EXTRA_ARGS=
 HPC_STRICT_HOST_KEY_CHECKING=true
 HPC_KNOWN_HOSTS_PATH=
+HPC_SSH_CONTROL_PATH=
 ```
+
+If your institution requires password after public-key authentication, start a local SSH control master first:
+
+```bash
+scripts/hpc/start_control_master.sh
+```
+
+Enter the HPC password interactively in your terminal. Application Finder can then reuse `HPC_SSH_CONTROL_PATH` for non-interactive `ssh`, `rsync`, and Slurm commands without storing or automating the password.
 
 Admin-only HPC API:
 

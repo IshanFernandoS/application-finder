@@ -185,6 +185,17 @@ PY"""
     def _ssh_base(self) -> List[str]:
         strict = "yes" if settings.hpc_strict_host_key_checking else "no"
         cmd = ["ssh", "-A", "-o", "BatchMode=yes", "-o", f"StrictHostKeyChecking={strict}"]
+        if settings.hpc_ssh_control_path:
+            cmd.extend(
+                [
+                    "-o",
+                    "ControlMaster=auto",
+                    "-o",
+                    "ControlPersist=10m",
+                    "-o",
+                    f"ControlPath={settings.hpc_ssh_control_path}",
+                ]
+            )
         if settings.hpc_known_hosts_path:
             cmd.extend(["-o", f"UserKnownHostsFile={settings.hpc_known_hosts_path}"])
         if settings.hpc_ssh_key_path:
@@ -220,6 +231,17 @@ PY"""
     def _run_rsync(self, source: str, dest: str) -> None:
         strict = "yes" if settings.hpc_strict_host_key_checking else "no"
         ssh_parts = ["ssh", "-A", "-o", "BatchMode=yes", "-o", f"StrictHostKeyChecking={strict}"]
+        if settings.hpc_ssh_control_path:
+            ssh_parts.extend(
+                [
+                    "-o",
+                    "ControlMaster=auto",
+                    "-o",
+                    "ControlPersist=10m",
+                    "-o",
+                    f"ControlPath={settings.hpc_ssh_control_path}",
+                ]
+            )
         if settings.hpc_known_hosts_path:
             ssh_parts.extend(["-o", f"UserKnownHostsFile={settings.hpc_known_hosts_path}"])
         if settings.hpc_ssh_key_path:
@@ -283,6 +305,8 @@ PY"""
             replacements.append((str(settings.hpc_ssh_key_path), "[ssh-key-path]"))
         if settings.hpc_known_hosts_path:
             replacements.append((str(settings.hpc_known_hosts_path), "[known-hosts-path]"))
+        if settings.hpc_ssh_control_path:
+            replacements.append((settings.hpc_ssh_control_path, "[ssh-control-path]"))
         if settings.hpc_workdir:
             replacements.append((settings.hpc_workdir, "[hpc-workdir]"))
         if settings.hpc_host and settings.hpc_username:

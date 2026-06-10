@@ -85,6 +85,7 @@ class Settings:
     hpc_rsync_extra_args: str
     hpc_strict_host_key_checking: bool
     hpc_known_hosts_path: Optional[Path]
+    hpc_ssh_control_path: Optional[str]
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -152,6 +153,7 @@ class Settings:
             hpc_known_hosts_path=Path(os.getenv("HPC_KNOWN_HOSTS_PATH", "")).expanduser()
             if os.getenv("HPC_KNOWN_HOSTS_PATH")
             else None,
+            hpc_ssh_control_path=os.path.expanduser(os.getenv("HPC_SSH_CONTROL_PATH", "")) or None,
         )
 
     @property
