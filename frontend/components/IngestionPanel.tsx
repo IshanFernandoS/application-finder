@@ -73,6 +73,33 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
     );
   }
 
+  async function ingestSingleResult(item: LiteratureResult) {
+    const key = resultKey(item);
+    await runAction(
+      `ingest-extract-result:${key}`,
+      async () => {
+        const result = await ingestAndExtractResults([item]);
+        const latestStatus = await apiGet<IngestionStatus>("/ingest/status").catch(() => undefined);
+        return { result, latestStatus };
+      },
+      ({ result, latestStatus }) => {
+        setMessage(`Paper processed; ${result.application_nodes.length} descriptors extracted`);
+        setStatus(
+          latestStatus || {
+            documents: result.ingestion.documents,
+            evidence_chunks: result.ingestion.evidence_chunks,
+            application_nodes: status?.application_nodes
+          }
+        );
+        setSelected((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+      }
+    );
+  }
+
   async function refreshStatus() {
     const nextStatus = await apiGet<IngestionStatus>("/ingest/status");
     setStatus(nextStatus);
@@ -239,6 +266,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
             const key = resultKey(item);
             const failed = isFailure(item);
             const checked = selected.has(key);
+            const resultBusy = busy === `ingest-extract-result:${key}`;
             return (
               <article key={key} className="rounded border border-line bg-shell p-4">
                 <div className="grid gap-3 sm:grid-cols-[32px_minmax(0,1fr)]">
@@ -260,12 +288,23 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
                     <h3 className="mt-2 text-sm font-semibold">{item.title}</h3>
                     {item.authors.length ? <div className="mt-1 text-xs text-muted">{item.authors.slice(0, 6).join(", ")}</div> : null}
                     {item.abstract ? <p className="mt-2 line-clamp-3 text-sm text-muted">{stripTags(item.abstract)}</p> : null}
-                    {item.url ? (
-                      <a className="focus-ring mt-3 inline-flex items-center gap-1 rounded text-xs font-medium text-accent" href={item.url} rel="noreferrer" target="_blank">
-                        Open source
-                        <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                      </a>
-                    ) : null}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        className="focus-ring inline-flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={Boolean(busy) || failed}
+                        onClick={() => void ingestSingleResult(item)}
+                        type="button"
+                      >
+                        {resultBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <PlusCircle className="h-3.5 w-3.5" aria-hidden />}
+                        Ingest + extract descriptors
+                      </button>
+                      {item.url ? (
+                        <a className="focus-ring inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs font-medium text-accent" href={item.url} rel="noreferrer" target="_blank">
+                          Open source
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </article>

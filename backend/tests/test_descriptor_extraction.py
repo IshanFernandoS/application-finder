@@ -139,6 +139,39 @@ def test_descriptor_extraction_can_filter_to_selected_evidence(monkeypatch):
         db.close()
 
 
+def test_descriptor_extraction_merges_duplicate_node_ids_in_one_run(monkeypatch):
+    _configure_fake_openai(
+        monkeypatch,
+        '{"application_nodes":[{"node_id":"node_duplicate","label":"Shared descriptor","application_text":"Shared electromagnetic metamaterial descriptor.","domain":"metamaterials and metasurfaces","function":"electromagnetic response engineering","confidence":0.5}]}',
+    )
+    db = _session()
+    try:
+        _add_evidence(
+            db,
+            "ev_first",
+            "First Electromagnetic Metamaterial Paper",
+            "First electromagnetic metamaterial evidence.",
+            section="metadata",
+        )
+        _add_evidence(
+            db,
+            "ev_second",
+            "Second Electromagnetic Metamaterial Paper",
+            "Second electromagnetic metamaterial evidence.",
+            section="metadata",
+        )
+
+        nodes = DescriptorExtractionService().extract_for_scope(db, DEFAULT_EM_SCOPE, limit=2)
+
+        assert len(nodes) == 2
+        assert db.query(ApplicationNodeRecord).count() == 1
+        record = db.get(ApplicationNodeRecord, "node_duplicate")
+        assert record is not None
+        assert record.payload["node_id"] == "node_duplicate"
+    finally:
+        db.close()
+
+
 def test_descriptor_extraction_accepts_nodes_key_and_fills_defaults(monkeypatch):
     _configure_fake_openai(
         monkeypatch,

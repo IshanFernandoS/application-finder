@@ -275,13 +275,7 @@ class DescriptorExtractionService:
         return requirements
 
     def _upsert_node(self, db: Session, scope: Scope, node: ApplicationNode) -> None:
-        record_existing = db.get(ApplicationNodeRecord, node.node_id)
-        if record_existing:
-            record_existing.payload = model_to_dict(node)
-            record_existing.scope_id = scope.scope_id
-            record_existing.cluster_id = node.cluster_id
-            return
-        db.add(
+        db.merge(
             ApplicationNodeRecord(
                 node_id=node.node_id,
                 scope_id=scope.scope_id,
@@ -289,3 +283,4 @@ class DescriptorExtractionService:
                 payload=model_to_dict(node),
             )
         )
+        db.flush()
