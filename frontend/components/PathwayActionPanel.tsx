@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CheckCircle2, FlaskConical, Loader2, Search, Star } from "lucide-react";
 import { apiPost } from "@/lib/api";
-import type { MaterialCandidate, Pathway } from "@/lib/types";
+import type { HPCJob, MaterialCandidate, Pathway } from "@/lib/types";
 
 export function PathwayActionPanel({ pathway }: { pathway?: Pathway }) {
   const router = useRouter();
@@ -58,6 +58,30 @@ export function PathwayActionPanel({ pathway }: { pathway?: Pathway }) {
         )
     },
     {
+      key: "mattergen",
+      label: "Run MatterGen on HPC",
+      icon: FlaskConical,
+      run: () =>
+        run(
+          "mattergen",
+          async () => {
+            await apiPost(`/pathways/${pathway.pathway_id}/mattergen/translate-constraints`);
+            return apiPost<HPCJob>("/hpc/jobs", {
+              job_type: "mattergen_generation",
+              pathway_id: pathway.pathway_id,
+              payload: {
+                submitted_from: "pathway_action_panel",
+                gap_id: pathway.gap_id
+              }
+            });
+          },
+          (job) =>
+            setMessage(
+              `MatterGen HPC job ${job.job_id} ${job.slurm_job_id ? `submitted to Slurm as ${job.slurm_job_id}` : `created with status ${job.status}`}.`
+            )
+        )
+    },
+    {
       key: "candidates",
       label: "Retrieve known candidates",
       icon: Search,
@@ -95,6 +119,11 @@ export function PathwayActionPanel({ pathway }: { pathway?: Pathway }) {
       </div>
       {message ? <div className="mt-4 rounded border border-teal/40 bg-teal/10 p-3 text-sm">{message}</div> : null}
       {error ? <div className="mt-4 rounded border border-coral/40 bg-coral/10 p-3 text-sm">{error}</div> : null}
+      {message?.includes("MatterGen HPC job") ? (
+        <a className="focus-ring mt-3 inline-flex rounded bg-accent px-3 py-2 text-sm font-medium text-white" href="/hpc">
+          Open HPC Worker
+        </a>
+      ) : null}
     </section>
   );
 }
