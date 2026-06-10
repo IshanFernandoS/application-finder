@@ -71,6 +71,7 @@ fi
   [ -n "$HPC_GPU_REQUEST" ] && echo "#SBATCH --gres=${HPC_GPU_REQUEST}"
   cat <<'SLURM'
 
+source /etc/profile >/dev/null 2>&1 || true
 set -euo pipefail
 export INPUT_JSON="$PWD/input.json"
 export OUTPUT_DIR="$PWD/outputs"
@@ -145,5 +146,5 @@ SLURM
 
 ssh "${ssh_opts[@]}" "$REMOTE" "mkdir -p '$REMOTE_JOB_DIR' '$REMOTE_JOB_DIR/logs' '$REMOTE_JOB_DIR/outputs'"
 rsync -az ${HPC_RSYNC_EXTRA_ARGS} -e "ssh ${ssh_opts[*]}" "$LOCAL_JOB_DIR/" "$REMOTE:$REMOTE_JOB_DIR/"
-ssh "${ssh_opts[@]}" "$REMOTE" "cd '$REMOTE_JOB_DIR' && sbatch job.slurm"
+ssh "${ssh_opts[@]}" "$REMOTE" "source /etc/profile >/dev/null 2>&1 || true; cd '$REMOTE_JOB_DIR' && sbatch job.slurm"
 echo "Submitted Application Finder MatterGen HPC job: ${JOB_ID}"

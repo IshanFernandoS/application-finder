@@ -154,6 +154,7 @@ PY"""
         lines.extend(
             [
                 "",
+                "source /etc/profile >/dev/null 2>&1 || true",
                 "set -euo pipefail",
                 f"export INPUT_JSON={shlex.quote(remote_job_dir + '/input.json')}",
                 f"export OUTPUT_DIR={shlex.quote(output_dir)}",
@@ -207,8 +208,9 @@ PY"""
         return f"{settings.hpc_username}@{settings.hpc_host}"
 
     def _run_ssh(self, remote_command: str, timeout: int = 60, check: bool = False) -> subprocess.CompletedProcess[str]:
+        wrapped_command = "source /etc/profile >/dev/null 2>&1 || true\n" + remote_command
         result = subprocess.run(
-            [*self._ssh_base(), remote_command],
+            [*self._ssh_base(), wrapped_command],
             text=True,
             capture_output=True,
             timeout=timeout,

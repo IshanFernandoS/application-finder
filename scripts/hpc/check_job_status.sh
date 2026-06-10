@@ -32,4 +32,4 @@ if [ -n "$HPC_SSH_KEY_PATH" ]; then
 fi
 
 REMOTE="${HPC_USERNAME}@${HPC_HOST}"
-ssh "${ssh_opts[@]}" "$REMOTE" "squeue -j '$SLURM_JOB_ID' || sacct -j '$SLURM_JOB_ID' --format=JobID,State,Elapsed,ExitCode"
+ssh "${ssh_opts[@]}" "$REMOTE" "source /etc/profile >/dev/null 2>&1 || true; squeue -j '$SLURM_JOB_ID' || sacct -j '$SLURM_JOB_ID' --format=JobID,State,Elapsed,ExitCode"
