@@ -5,6 +5,9 @@ import { CheckSquare, ExternalLink, Loader2, PlusCircle, Search, Square, UploadC
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import type { ApplicationNode, IngestionStatus, LiteratureIngestAndExtractSummary, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
 
+const DESCRIPTOR_BATCH_SIZE = 5;
+const MAX_DESCRIPTOR_EXTRACTION = 50;
+
 export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionStatus }) {
   const [query, setQuery] = useState("electromagnetic metamaterial inverse design high permittivity low loss");
   const [limit, setLimit] = useState(20);
@@ -349,7 +352,7 @@ function normalizeLiteratureResult(item: LiteratureResult): LiteratureResult {
 }
 
 function descriptorLimit(results: LiteratureResult[]) {
-  return Math.min(50, Math.max(results.length, 1));
+  return Math.min(MAX_DESCRIPTOR_EXTRACTION, Math.max(results.length, 1));
 }
 
 function resultKey(item: LiteratureResult) {
@@ -379,11 +382,17 @@ async function ingestResults(results: LiteratureResult[]) {
 async function ingestAndExtractResults(results: LiteratureResult[]): Promise<LiteratureIngestAndExtractSummary> {
   const normalizedResults = results.map(normalizeLiteratureResult);
   try {
-    return await apiPost<LiteratureIngestAndExtractSummary>("/ingest/public-search/ingest-and-extract", {
-      results: normalizedResults,
-      scope_id: "electromagnetic_functional_materials",
-      limit: descriptorLimit(normalizedResults)
-    });
+    const ingestion = await ingestResults(normalizedResults);
+    const evidenceIds = (ingestion.evidence_ids || []).slice(0, descriptorLimit(normalizedResults));
+    const application_nodes: ApplicationNode[] = [];
+    for (const batch of chunk(evidenceIds, DESCRIPTOR_BATCH_SIZE)) {
+      const nodes = await apiPost<ApplicationNode[]>(
+        `/ingest/extract-descriptors?scope_id=electromagnetic_functional_materials&limit=${batch.length}`,
+        { evidence_ids: batch }
+      );
+      application_nodes.push(...nodes);
+    }
+    return { ingestion, evidence_ids: evidenceIds, application_nodes };
   } catch (exc) {
     if (!isNotFoundError(exc)) {
       throw exc;
@@ -394,6 +403,14 @@ async function ingestAndExtractResults(results: LiteratureResult[]): Promise<Lit
     );
     return { ingestion, evidence_ids: [], application_nodes };
   }
+}
+
+function chunk<T>(values: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
 }
 
 async function ingestResultsAsEvidenceFiles(results: LiteratureResult[]): Promise<LiteratureIngestSummary> {

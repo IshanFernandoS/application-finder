@@ -51,6 +51,7 @@ export interface LiteratureIngestSummary extends IngestionStatus {
   documents_added: number;
   evidence_chunks_added: number;
   skipped: number;
+  evidence_ids?: string[];
 }
 
 export interface LiteratureIngestAndExtractSummary {

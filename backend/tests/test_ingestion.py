@@ -94,6 +94,20 @@ def test_public_literature_results_ingest_and_skip_duplicates(tmp_path: Path, mo
         assert summary["skipped"] == 2
         assert db.query(DocumentRecord).count() == 1
         assert db.query(EvidenceRecord).one().text.startswith("High permittivity")
+        assert IngestionService().evidence_ids_for_public_results(
+            db,
+            [
+                LiteratureResult(
+                    title="Inverse Design of Electromagnetic Metamaterials",
+                    authors=["A. Researcher"],
+                    year=2025,
+                    doi="10.1000/example",
+                    url="https://example.test/paper",
+                    source="openalex",
+                    abstract="High permittivity, low loss electromagnetic metamaterial design evidence.",
+                )
+            ],
+        )
         assert (tmp_path / "metadata" / "evidence_chunks.jsonl").exists()
     finally:
         db.close()

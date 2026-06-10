@@ -70,7 +70,9 @@ def public_search(request: LiteratureSearchRequest | None = Body(default=None), 
 @router.post("/public-search/ingest")
 def ingest_public_search(request: LiteratureIngestRequest, db: Session = Depends(get_db)):
     try:
-        return IngestionService().ingest_public_results(db, request.results)
+        ingestion_service = IngestionService()
+        summary = ingestion_service.ingest_public_results(db, request.results)
+        return {**summary, "evidence_ids": ingestion_service.evidence_ids_for_public_results(db, request.results)}
     except Exception as exc:
         raise_http(exc)
 
