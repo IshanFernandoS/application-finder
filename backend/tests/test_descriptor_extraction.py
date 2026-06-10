@@ -232,3 +232,35 @@ def test_descriptor_extraction_normalizes_scalar_list_fields(monkeypatch):
         assert db.query(ApplicationNodeRecord).count() == 1
     finally:
         db.close()
+
+
+def test_descriptor_extraction_normalizes_qualitative_confidence(monkeypatch):
+    _configure_fake_openai(
+        monkeypatch,
+        (
+            '{"application_nodes":[{'
+            '"label":"Low confidence absorber descriptor",'
+            '"application_text":"A title-derived electromagnetic absorber descriptor.",'
+            '"domain":"absorbers",'
+            '"function":"electromagnetic absorption control",'
+            '"confidence":"low"'
+            "}]}"
+        ),
+    )
+    db = _session()
+    try:
+        _add_evidence(
+            db,
+            "ev_low_confidence",
+            "Low Confidence Electromagnetic Absorber",
+            "Electromagnetic absorber metadata with limited descriptor evidence.",
+            section="metadata",
+        )
+
+        nodes = DescriptorExtractionService().extract_for_scope(db, DEFAULT_EM_SCOPE, limit=1)
+
+        assert len(nodes) == 1
+        assert nodes[0].confidence == 0.28
+        assert db.query(ApplicationNodeRecord).count() == 1
+    finally:
+        db.close()

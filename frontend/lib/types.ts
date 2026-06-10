@@ -9,6 +9,12 @@ export interface Scope {
   included_device_families: string[];
   included_mechanisms: string[];
   included_property_types: string[];
+  excluded_domains: string[];
+  excluded_material_classes: string[];
+  mattergen_compatibility_notes: string[];
+  validation_methods: string[];
+  default_search_queries: string[];
+  descriptor_weights: Record<string, number>;
 }
 
 export interface EvidenceChunk {

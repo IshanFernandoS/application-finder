@@ -147,8 +147,41 @@ class DescriptorExtractionService:
         node["source_ids"] = node.get("source_ids") or [evidence["document_id"]]
         node["evidence_ids"] = node.get("evidence_ids") or [evidence["evidence_id"]]
         node["evidence_count"] = node.get("evidence_count") or 1
-        node["confidence"] = max(0.0, min(float(node.get("confidence", defaults["confidence"]) or 0.0), 1.0))
+        node["confidence"] = self._coerce_confidence(node.get("confidence"), defaults["confidence"])
         return node
+
+    def _coerce_confidence(self, value: Any, default: float) -> float:
+        if value in (None, ""):
+            return self._clamp_score(default)
+        if isinstance(value, (int, float)):
+            return self._clamp_score(float(value))
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if not normalized:
+                return self._clamp_score(default)
+            if normalized.endswith("%"):
+                try:
+                    return self._clamp_score(float(normalized[:-1].strip()) / 100.0)
+                except ValueError:
+                    pass
+            try:
+                return self._clamp_score(float(normalized))
+            except ValueError:
+                qualitative_scores = (
+                    ("very high", 0.92),
+                    ("high", 0.8),
+                    ("medium", 0.55),
+                    ("moderate", 0.55),
+                    ("very low", 0.15),
+                    ("low", 0.28),
+                )
+                for token, score in qualitative_scores:
+                    if token in normalized:
+                        return score
+        return self._clamp_score(default)
+
+    def _clamp_score(self, value: float) -> float:
+        return max(0.0, min(float(value or 0.0), 1.0))
 
     def _fallback_node(self, scope: Scope, evidence: dict) -> ApplicationNode | None:
         combined = f"{evidence.get('title', '')}\n{evidence.get('text', '')}".lower()
