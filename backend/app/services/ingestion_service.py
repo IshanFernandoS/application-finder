@@ -21,6 +21,7 @@ from ..literature_sources.openalex import OpenAlexSource
 from ..literature_sources.pubmed import PubMedSource
 from ..literature_sources.zotero_import import import_zotero_file
 from ..schemas import Document, EvidenceChunk, LiteratureResult
+from .full_text_retrieval_service import FullTextRetrievalService, RetrievedFullText
 from .ids import stable_id
 from .object_storage_service import ObjectStorageService
 from .serialization import model_to_dict
@@ -133,6 +134,9 @@ class IngestionService:
         before_documents = db.query(DocumentRecord).count()
         before_evidence = db.query(EvidenceRecord).count()
         skipped = 0
+        full_text_retriever = FullTextRetrievalService()
+        full_text_attempts = 0
+        full_text_attempt_limit = max(0, settings.public_full_text_max_papers_per_request)
         for result in results:
             title = result.title.strip()
             if not title or title.endswith(" search failed"):
@@ -148,7 +152,13 @@ class IngestionService:
                 abstract=result.abstract,
                 extra=result.extra or {},
             )
-            if not self._store_metadata_result(db, source_result):
+            fetch_full_text = (
+                full_text_attempts < full_text_attempt_limit
+                and full_text_retriever.has_retrieval_lead(source_result)
+            )
+            if fetch_full_text:
+                full_text_attempts += 1
+            if not self._store_metadata_result(db, source_result, full_text_retriever, fetch_full_text=fetch_full_text):
                 skipped += 1
         db.commit()
         self._write_jsonl_backup(db)
@@ -171,10 +181,7 @@ class IngestionService:
             doi = normalize_doi(result.doi)
             existing = db.query(DocumentRecord).filter(DocumentRecord.doi == doi).first() if doi else None
             document_id = existing.document_id if existing else stable_id("doc", doi or title, result.year or "")
-            section = "abstract" if (result.abstract or "").strip() else "metadata"
-            evidence_id = stable_id("ev", document_id, section)
-            if db.get(EvidenceRecord, evidence_id):
-                evidence_ids.append(evidence_id)
+            evidence_ids.extend(self._ranked_descriptor_evidence_ids(db, document_id))
         return evidence_ids
 
     def status(self, db: Session) -> Dict[str, int]:
@@ -202,7 +209,13 @@ class IngestionService:
             return parse_text_file(path)
         return []
 
-    def _store_metadata_result(self, db: Session, result: LiteratureSearchResult) -> bool:
+    def _store_metadata_result(
+        self,
+        db: Session,
+        result: LiteratureSearchResult,
+        full_text_retriever: FullTextRetrievalService | None = None,
+        fetch_full_text: bool = True,
+    ) -> bool:
         doi = normalize_doi(result.doi)
         document_id = stable_id("doc", doi or result.title, result.year or "")
         existing = db.query(DocumentRecord).filter(DocumentRecord.doi == doi).first() if doi else None
@@ -228,6 +241,9 @@ class IngestionService:
 
         if self._store_metadata_evidence(db, document, result):
             added = True
+        if fetch_full_text and full_text_retriever:
+            if self._store_public_full_text_evidence(db, document, result, full_text_retriever):
+                added = True
         db.flush()
         return added
 
@@ -268,6 +284,131 @@ class IngestionService:
             "No abstract was available from the public metadata source.",
         ]
         return "\n".join(line for line in lines if line), "metadata"
+
+    def _store_public_full_text_evidence(
+        self,
+        db: Session,
+        document: Document,
+        result: LiteratureSearchResult,
+        full_text_retriever: FullTextRetrievalService,
+    ) -> bool:
+        if self._document_has_public_full_text(db, document.document_id):
+            return False
+        retrieved = full_text_retriever.retrieve(result, document.document_id)
+        if not retrieved:
+            return False
+        source_path = self._source_path_for_retrieved_full_text(document, retrieved)
+        rows = []
+        for idx, (page, section, text) in enumerate(
+            chunk_pages(retrieved.pages)[: settings.public_full_text_max_chunks_per_paper],
+            start=1,
+        ):
+            evidence_id = stable_id("ev", document.document_id, "public_full_text", idx, text[:120])
+            if db.get(EvidenceRecord, evidence_id):
+                continue
+            chunk = EvidenceChunk(
+                evidence_id=evidence_id,
+                document_id=document.document_id,
+                title=document.title,
+                authors=document.authors,
+                year=document.year,
+                doi=document.doi,
+                source_type=self._public_full_text_source_type(retrieved),
+                source_path=source_path,
+                page=page,
+                section=section or "full_text",
+                text=text,
+                snippet=text[:420],
+                metadata={
+                    "chunk_index": idx,
+                    "original_source": result.source,
+                    "public_full_text": True,
+                    "public_full_text_url": retrieved.source_url,
+                    "content_type": retrieved.content_type,
+                    **retrieved.metadata,
+                },
+            )
+            rows.append(EvidenceRecord(evidence_id=evidence_id, document_id=document.document_id, text=text, payload=model_to_dict(chunk)))
+        if not rows:
+            return False
+        db.add_all(rows)
+        return True
+
+    def _source_path_for_retrieved_full_text(self, document: Document, retrieved: RetrievedFullText) -> str:
+        if not retrieved.local_path:
+            return retrieved.source_url
+        object_path = f"public-full-text/{document.document_id}/{retrieved.local_path.name}"
+        try:
+            return ObjectStorageService().upload_file(retrieved.local_path, object_path, content_type="application/pdf")
+        except Exception:
+            return retrieved.source_url
+
+    def _public_full_text_source_type(self, retrieved: RetrievedFullText) -> str:
+        if retrieved.local_path or "pdf" in (retrieved.content_type or ""):
+            return "public_full_text_pdf"
+        return "public_full_text_html"
+
+    def _document_has_public_full_text(self, db: Session, document_id: str) -> bool:
+        records = db.query(EvidenceRecord).filter(EvidenceRecord.document_id == document_id).all()
+        for record in records:
+            metadata = (record.payload or {}).get("metadata") or {}
+            if metadata.get("public_full_text"):
+                return True
+        return False
+
+    def _ranked_descriptor_evidence_ids(self, db: Session, document_id: str) -> List[str]:
+        records = db.query(EvidenceRecord).filter(EvidenceRecord.document_id == document_id).all()
+        if not records:
+            return []
+        full_text_records = [record for record in records if ((record.payload or {}).get("metadata") or {}).get("public_full_text")]
+        if full_text_records:
+            ranked = sorted(full_text_records, key=self._descriptor_record_sort_key)
+            return [
+                record.evidence_id
+                for record in ranked[: max(1, settings.public_full_text_descriptor_chunks_per_paper)]
+            ]
+        abstract_records = [record for record in records if (record.payload or {}).get("section") == "abstract"]
+        if abstract_records:
+            return [abstract_records[0].evidence_id]
+        metadata_records = [record for record in records if (record.payload or {}).get("section") == "metadata"]
+        if metadata_records:
+            return [metadata_records[0].evidence_id]
+        return [records[0].evidence_id]
+
+    def _descriptor_record_sort_key(self, record: EvidenceRecord) -> tuple[float, int, int]:
+        payload = record.payload or {}
+        text = f"{payload.get('title', '')}\n{record.text}".lower()
+        score = self._descriptor_text_score(text)
+        chunk_index = ((payload.get("metadata") or {}).get("chunk_index") or 0)
+        try:
+            normalized_index = int(chunk_index)
+        except (TypeError, ValueError):
+            normalized_index = 0
+        return (-score, normalized_index, -len(record.text))
+
+    def _descriptor_text_score(self, text: str) -> float:
+        weighted_terms = {
+            "permittivity": 3.0,
+            "permeability": 3.0,
+            "dielectric": 2.5,
+            "loss tangent": 2.5,
+            "conductivity": 2.0,
+            "refractive index": 2.0,
+            "impedance": 2.0,
+            "absorber": 2.0,
+            "absorption": 2.0,
+            "metamaterial": 2.0,
+            "metasurface": 2.0,
+            "microwave": 1.5,
+            "terahertz": 1.5,
+            "thz": 1.5,
+            "ghz": 1.5,
+            "simulation": 1.0,
+            "experiment": 1.0,
+            "fabrication": 1.0,
+            "material": 1.0,
+        }
+        return sum(weight for term, weight in weighted_terms.items() if term in text) + min(len(text), 3000) / 3000
 
     def _dedupe_results(self, results: List[LiteratureSearchResult]) -> List[LiteratureSearchResult]:
         seen = set()

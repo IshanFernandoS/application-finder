@@ -49,6 +49,13 @@ class Settings:
     supabase_storage_bucket: str
     supabase_signed_url_ttl_seconds: int
     enable_online_metadata: bool
+    enable_public_full_text_fetch: bool
+    public_full_text_max_pdf_mb: int
+    public_full_text_timeout_seconds: float
+    public_full_text_max_candidates: int
+    public_full_text_max_papers_per_request: int
+    public_full_text_max_chunks_per_paper: int
+    public_full_text_descriptor_chunks_per_paper: int
     enable_openai_reasoning: bool
     enable_mattergen: bool
     mattergen_mode: str
@@ -115,6 +122,15 @@ class Settings:
             supabase_storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET", "gap2material-artifacts"),
             supabase_signed_url_ttl_seconds=int(os.getenv("SUPABASE_SIGNED_URL_TTL_SECONDS", "604800")),
             enable_online_metadata=env_bool("ENABLE_ONLINE_METADATA", True),
+            enable_public_full_text_fetch=env_bool("ENABLE_PUBLIC_FULL_TEXT_FETCH", True),
+            public_full_text_max_pdf_mb=int(os.getenv("PUBLIC_FULL_TEXT_MAX_PDF_MB", "25")),
+            public_full_text_timeout_seconds=float(os.getenv("PUBLIC_FULL_TEXT_TIMEOUT_SECONDS", "10")),
+            public_full_text_max_candidates=int(os.getenv("PUBLIC_FULL_TEXT_MAX_CANDIDATES", "4")),
+            public_full_text_max_papers_per_request=int(os.getenv("PUBLIC_FULL_TEXT_MAX_PAPERS_PER_REQUEST", "12")),
+            public_full_text_max_chunks_per_paper=int(os.getenv("PUBLIC_FULL_TEXT_MAX_CHUNKS_PER_PAPER", "80")),
+            public_full_text_descriptor_chunks_per_paper=int(
+                os.getenv("PUBLIC_FULL_TEXT_DESCRIPTOR_CHUNKS_PER_PAPER", "5")
+            ),
             enable_openai_reasoning=env_bool("ENABLE_OPENAI_REASONING", True),
             enable_mattergen=env_bool("ENABLE_MATTERGEN", True),
             mattergen_mode=os.getenv("MATTERGEN_MODE", "local"),

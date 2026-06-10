@@ -6,7 +6,8 @@ import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import type { ApplicationNode, IngestionStatus, LiteratureIngestAndExtractSummary, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
 
 const DESCRIPTOR_BATCH_SIZE = 5;
-const MAX_DESCRIPTOR_EXTRACTION = 50;
+const DESCRIPTOR_CHUNKS_PER_PAPER = 5;
+const MAX_DESCRIPTOR_EXTRACTION = 100;
 const MAX_RECENT_DESCRIPTOR_DISPLAY = 25;
 const INGESTION_STORAGE_KEY = "application-finder.ingestion-workspace.v1";
 
@@ -198,7 +199,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
     <section className="panel grid gap-5 p-5">
       <div>
         <h2 className="text-base font-semibold">Literature Ingestion</h2>
-        <p className="mt-2 text-sm text-muted">Local files, Zotero exports, public scholarly metadata, and descriptor extraction feed the evidence corpus.</p>
+        <p className="mt-2 text-sm text-muted">Local files, Zotero exports, open full text when available, public scholarly metadata, and descriptor extraction feed the evidence corpus.</p>
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -467,7 +468,7 @@ function normalizeLiteratureResult(item: LiteratureResult): LiteratureResult {
 }
 
 function descriptorLimit(results: LiteratureResult[]) {
-  return Math.min(MAX_DESCRIPTOR_EXTRACTION, Math.max(results.length, 1));
+  return Math.min(MAX_DESCRIPTOR_EXTRACTION, Math.max(results.length * DESCRIPTOR_CHUNKS_PER_PAPER, 1));
 }
 
 function resultKey(item: LiteratureResult) {

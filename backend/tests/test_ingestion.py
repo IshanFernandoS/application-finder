@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -12,8 +13,22 @@ from backend.app.ingestion.chunker import chunk_text
 from backend.app.ingestion.metadata_extractor import extract_metadata
 from backend.app.literature_sources.base import LiteratureSearchResult
 from backend.app.schemas import LiteratureResult
+from backend.app.services.full_text_retrieval_service import RetrievedFullText
 from backend.app.services.ingestion_service import IngestionService
 from backend.app.services.object_storage_service import ObjectStorageService
+
+
+class NoFullTextService:
+    def has_retrieval_lead(self, result):
+        return False
+
+    def retrieve(self, result, document_id):
+        return None
+
+
+@pytest.fixture(autouse=True)
+def disable_public_full_text_network(monkeypatch):
+    monkeypatch.setattr(ingestion_module, "FullTextRetrievalService", NoFullTextService)
 
 
 def test_text_chunking_preserves_nonempty_chunks():
@@ -30,7 +45,9 @@ def test_metadata_extractor_finds_doi_and_year(tmp_path: Path):
     assert metadata["year"] == 2024
 
 
-def test_object_storage_service_local_mode_returns_local_path(tmp_path: Path):
+def test_object_storage_service_local_mode_returns_local_path(tmp_path: Path, monkeypatch):
+    test_settings = replace(app_settings, object_storage_backend="local")
+    monkeypatch.setattr(storage_module, "settings", test_settings)
     path = tmp_path / "artifact.json"
     path.write_text("{}", encoding="utf-8")
     assert ObjectStorageService().upload_file(path) == str(path)
@@ -237,6 +254,76 @@ def test_public_literature_ingest_backfills_missing_metadata_evidence(tmp_path: 
         assert summary["skipped"] == 0
         assert db.query(DocumentRecord).count() == 1
         assert db.query(EvidenceRecord).one().payload["section"] == "metadata"
+    finally:
+        db.close()
+
+
+def test_public_literature_ingest_stores_open_full_text_chunks(tmp_path: Path, monkeypatch):
+    test_settings = replace(
+        app_settings,
+        data_dir=tmp_path,
+        object_storage_backend="local",
+        public_full_text_max_chunks_per_paper=4,
+        public_full_text_descriptor_chunks_per_paper=2,
+    )
+    monkeypatch.setattr(ingestion_module, "settings", test_settings)
+    monkeypatch.setattr(storage_module, "settings", test_settings)
+
+    class FakeFullTextService:
+        def has_retrieval_lead(self, result):
+            return True
+
+        def retrieve(self, result, document_id):
+            return RetrievedFullText(
+                source_url="https://open.example.test/paper.pdf",
+                content_type="application/pdf",
+                pages=[
+                    (1, "page", "Introduction text without much electromagnetic detail."),
+                    (
+                        2,
+                        "page",
+                        "Metasurface absorber evidence with high permittivity, low loss tangent, "
+                        "impedance matching, microwave GHz response, dielectric material constraints. " * 8,
+                    ),
+                    (
+                        3,
+                        "page",
+                        "Fabrication and experiment evidence for dielectric metamaterial absorption. " * 8,
+                    ),
+                ],
+                metadata={"retrieval_method": "test_open_access"},
+            )
+
+    monkeypatch.setattr(ingestion_module, "FullTextRetrievalService", FakeFullTextService)
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    db = Session()
+    try:
+        result = LiteratureResult(
+            title="Open Full Text Electromagnetic Metasurface Absorber",
+            authors=["A. Researcher"],
+            year=2025,
+            doi="10.1000/open-full-text",
+            url="https://example.test/open",
+            source="openalex",
+            abstract="Abstract fallback should not be the preferred descriptor evidence.",
+            extra={"pdf_url": "https://open.example.test/paper.pdf"},
+        )
+        summary = IngestionService().ingest_public_results(db, [result])
+
+        assert summary["documents_added"] == 1
+        assert summary["evidence_chunks_added"] == 4
+        chunks = db.query(EvidenceRecord).all()
+        full_text_chunks = [chunk for chunk in chunks if chunk.payload["metadata"].get("public_full_text")]
+        assert len(full_text_chunks) == 3
+        assert {chunk.payload["source_type"] for chunk in full_text_chunks} == {"public_full_text_pdf"}
+        evidence_ids = IngestionService().evidence_ids_for_public_results(db, [result])
+        assert len(evidence_ids) == 2
+        selected_text = "\n".join(db.get(EvidenceRecord, evidence_id).text for evidence_id in evidence_ids)
+        assert "permittivity" in selected_text
+        assert "loss tangent" in selected_text
     finally:
         db.close()
 

@@ -43,12 +43,14 @@ Important variables:
 - `OPENAI_MODEL`: reasoning model.
 - `OPENAI_EMBEDDING_MODEL`: embedding model.
 - `UNPAYWALL_EMAIL`: optional public API contact email, defaulting to `h.i.s.fernando@qmul.ac.uk`.
+- `ENABLE_PUBLIC_FULL_TEXT_FETCH`: tries open-access full text for public search ingestion before falling back to abstracts/metadata.
+- `PUBLIC_FULL_TEXT_MAX_PAPERS_PER_REQUEST`, `PUBLIC_FULL_TEXT_MAX_CHUNKS_PER_PAPER`, `PUBLIC_FULL_TEXT_DESCRIPTOR_CHUNKS_PER_PAPER`: caps for full-text retrieval and descriptor extraction.
 - `DATABASE_URL`: defaults to SQLite at `data/gap2material_em.db`.
 - `MATTERGEN_PATH`, `MATTERGEN_WORKER_URL`, `MATTERGEN_API_KEY`: MatterGen local/remote worker settings.
 - `HPC_ENABLED`, `HPC_MODE`, `HPC_HOST`, `HPC_USERNAME`, `HPC_SSH_KEY_PATH`, `HPC_WORKDIR`: optional admin-only SSH/Slurm compute worker settings.
 - `ADMIN_API_KEY`: required for analytics/admin endpoints. On Vercel, set it as a server-side environment variable for the frontend admin proxy; do not expose it as `NEXT_PUBLIC_*`.
 
-Do not automate university logins, publisher logins, cookie reuse, proxy logins, credential storage, paywall bypassing, or paywalled scraping. Put legally accessible PDFs into `data/pdfs/`.
+Descriptor extraction uses uploaded full papers first, then open-access public full text when available through arXiv, PMC, Unpaywall, or search-provider OA links, then abstracts/metadata as fallback. Do not automate university logins, publisher logins, cookie reuse, proxy logins, credential storage, paywall bypassing, or paywalled scraping. Put legally accessible PDFs into `data/pdfs/`.
 
 ## Local Backend
 

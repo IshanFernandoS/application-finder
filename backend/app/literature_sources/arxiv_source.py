@@ -28,15 +28,22 @@ class ArxivSource(LiteratureSource):
             ]
             published = entry.findtext("atom:published", default="", namespaces=ns) or ""
             year_match = re.match(r"(\d{4})", published)
+            entry_url = entry.findtext("atom:id", default="", namespaces=ns)
+            pdf_url = ""
+            for link in entry.findall("atom:link", ns):
+                if link.attrib.get("title") == "pdf" or link.attrib.get("type") == "application/pdf":
+                    pdf_url = link.attrib.get("href", "")
+                    break
             results.append(
                 LiteratureSearchResult(
                     title=" ".join(title.split()),
                     authors=[a for a in authors if a],
                     year=int(year_match.group(1)) if year_match else None,
                     doi=None,
-                    url=entry.findtext("atom:id", default="", namespaces=ns),
+                    url=entry_url,
                     source=self.source_name,
                     abstract=" ".join((entry.findtext("atom:summary", default="", namespaces=ns) or "").split()),
+                    extra={"pdf_url": pdf_url} if pdf_url else {},
                 )
             )
         return results

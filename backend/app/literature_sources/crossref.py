@@ -37,7 +37,11 @@ class CrossrefSource(LiteratureSource):
                     url=item.get("URL"),
                     source=self.source_name,
                     abstract=item.get("abstract"),
-                    extra={"type": item.get("type"), "publisher": item.get("publisher")},
+                    extra={
+                        "type": item.get("type"),
+                        "publisher": item.get("publisher"),
+                        "links": item.get("link") or [],
+                    },
                 )
             )
         return results

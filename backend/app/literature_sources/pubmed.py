@@ -39,6 +39,7 @@ class PubMedSource(LiteratureSource):
             year = int(pubdate[:4]) if pubdate[:4].isdigit() else None
             article_ids = item.get("articleids", [])
             doi = next((row.get("value") for row in article_ids if row.get("idtype") == "doi"), None)
+            pmcid = next((row.get("value") for row in article_ids if row.get("idtype") in {"pmc", "pmcid"}), None)
             results.append(
                 LiteratureSearchResult(
                     title=item.get("title") or "Untitled",
@@ -48,7 +49,7 @@ class PubMedSource(LiteratureSource):
                     url=f"https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/",
                     source=self.source_name,
                     abstract=None,
-                    extra={"pubmed_id": pubmed_id, "source": item.get("source")},
+                    extra={"pubmed_id": pubmed_id, "pmcid": pmcid, "source": item.get("source")},
                 )
             )
         return results
