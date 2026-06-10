@@ -54,7 +54,7 @@ async function proxy(request: NextRequest, context: RouteContext) {
     headers.set("content-type", contentType);
   }
 
-  const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
+  const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
   const response = await fetch(target, {
     method: request.method,
     headers,

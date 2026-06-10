@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { CheckSquare, ExternalLink, Loader2, PlusCircle, Search, Square, UploadCloud } from "lucide-react";
-import { apiPost } from "@/lib/api";
-import type { LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
+import { apiGet, apiPost, apiUpload } from "@/lib/api";
+import type { IngestionStatus, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
 
 export function IngestionPanel() {
   const [query, setQuery] = useState("electromagnetic metamaterial inverse design high permittivity low loss");
@@ -45,7 +45,7 @@ export function IngestionPanel() {
     const selectedResults = results.filter((item) => selected.has(resultKey(item)) && !isFailure(item));
     await runAction(
       "ingest-selected",
-      () => apiPost<LiteratureIngestSummary>("/ingest/public-search/ingest", { results: selectedResults }),
+      () => ingestResults(selectedResults),
       (summary) => {
         setMessage(`${summary.documents_added} papers and ${summary.evidence_chunks_added} evidence chunks added`);
         setSelected(new Set());
@@ -220,4 +220,63 @@ function isFailure(item: LiteratureResult) {
 
 function stripTags(value: string) {
   return value.replace(/<[^>]+>/g, "");
+}
+
+async function ingestResults(results: LiteratureResult[]) {
+  try {
+    return await apiPost<LiteratureIngestSummary>("/ingest/public-search/ingest", { results });
+  } catch (exc) {
+    if (!isNotFoundError(exc)) {
+      throw exc;
+    }
+    return ingestResultsAsEvidenceFiles(results);
+  }
+}
+
+async function ingestResultsAsEvidenceFiles(results: LiteratureResult[]): Promise<LiteratureIngestSummary> {
+  const formData = new FormData();
+  results.forEach((item, index) => {
+    const filename = `application-finder-literature-${String(index + 1).padStart(2, "0")}-${slugify(item.doi || item.title)}.md`;
+    formData.append("files", new File([literatureMarkdown(item)], filename, { type: "text/markdown" }));
+  });
+  const summary = await apiUpload<{ documents: number; chunks: number; skipped: number }>("/ingest/files", formData);
+  const status = await apiGet<IngestionStatus>("/ingest/status").catch(() => undefined);
+  return {
+    documents_added: summary.documents,
+    evidence_chunks_added: summary.chunks,
+    skipped: summary.skipped,
+    documents: status?.documents ?? summary.documents,
+    evidence_chunks: status?.evidence_chunks ?? summary.chunks
+  };
+}
+
+function literatureMarkdown(item: LiteratureResult) {
+  const lines = [
+    item.title,
+    "",
+    item.authors.length ? `Authors: ${item.authors.join(", ")}` : "",
+    item.year ? `Year: ${item.year}` : "",
+    item.doi ? `DOI: ${item.doi}` : "",
+    item.url ? `URL: ${item.url}` : "",
+    `Source: ${item.source}`,
+    "",
+    "Abstract",
+    "",
+    stripTags(item.abstract || "No abstract was available from the public metadata source.")
+  ];
+  return lines.filter((line, index) => line || index < 2).join("\n");
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/https?:\/\//g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "paper";
+}
+
+function isNotFoundError(exc: unknown) {
+  const message = exc instanceof Error ? exc.message : String(exc);
+  return message.includes('"detail":"Not Found"') || message.includes("404") || message.includes("Not Found");
 }

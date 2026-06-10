@@ -46,3 +46,17 @@ export async function apiPost<T>(path: string, body?: unknown, init?: RequestIni
   }
   return response.json() as Promise<T>;
 }
+
+export async function apiUpload<T>(path: string, body: FormData, init?: RequestInit): Promise<T> {
+  const response = await fetch(apiUrl(path), {
+    method: "POST",
+    body,
+    cache: "no-store",
+    ...init
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `API request failed: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
