@@ -53,12 +53,12 @@ def test_object_storage_service_local_mode_returns_local_path(tmp_path: Path, mo
     assert ObjectStorageService().upload_file(path) == str(path)
 
 
-def test_public_search_uses_curated_sources_and_larger_limit(monkeypatch):
+def test_public_search_uses_curated_sources_and_2000_limit(monkeypatch):
     _configure_fake_literature_sources(monkeypatch)
 
-    results = IngestionService().public_search("electromagnetic absorber", limit=120)
+    results = IngestionService().public_search("electromagnetic absorber", limit=2500)
 
-    assert len(results) == 120
+    assert len(results) == 2000
     assert {result.source for result in results} == {"arxiv", "crossref", "openalex", "pubmed"}
     assert "semantic_scholar" not in {result.source for result in results}
 

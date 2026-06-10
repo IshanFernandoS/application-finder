@@ -112,7 +112,7 @@ class IngestionService:
         query = query.strip()
         if not query:
             return []
-        requested_limit = max(1, min(int(limit or 10), 200))
+        requested_limit = max(1, min(int(limit or 10), settings.public_search_max_results))
         sources = [
             OpenAlexSource(settings.literature_contact_email),
             CrossrefSource(settings.literature_contact_email),
@@ -120,7 +120,7 @@ class IngestionService:
             PubMedSource(settings.literature_contact_email),
         ]
         results: List[LiteratureSearchResult] = []
-        per_source_limit = max(1, min(75, (requested_limit + len(sources) - 1) // len(sources)))
+        per_source_limit = max(1, (requested_limit + len(sources) - 1) // len(sources))
         with ThreadPoolExecutor(max_workers=len(sources)) as executor:
             future_by_source = {executor.submit(source.search, query, per_source_limit): source for source in sources}
             for future in as_completed(future_by_source):

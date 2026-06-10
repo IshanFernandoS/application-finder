@@ -49,6 +49,7 @@ class Settings:
     supabase_storage_bucket: str
     supabase_signed_url_ttl_seconds: int
     enable_online_metadata: bool
+    public_search_max_results: int
     enable_public_full_text_fetch: bool
     public_full_text_max_pdf_mb: int
     public_full_text_timeout_seconds: float
@@ -122,6 +123,7 @@ class Settings:
             supabase_storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET", "gap2material-artifacts"),
             supabase_signed_url_ttl_seconds=int(os.getenv("SUPABASE_SIGNED_URL_TTL_SECONDS", "604800")),
             enable_online_metadata=env_bool("ENABLE_ONLINE_METADATA", True),
+            public_search_max_results=int(os.getenv("PUBLIC_SEARCH_MAX_RESULTS", "2000")),
             enable_public_full_text_fetch=env_bool("ENABLE_PUBLIC_FULL_TEXT_FETCH", True),
             public_full_text_max_pdf_mb=int(os.getenv("PUBLIC_FULL_TEXT_MAX_PDF_MB", "25")),
             public_full_text_timeout_seconds=float(os.getenv("PUBLIC_FULL_TEXT_TIMEOUT_SECONDS", "10")),

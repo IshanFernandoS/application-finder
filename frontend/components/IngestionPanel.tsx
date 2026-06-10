@@ -8,6 +8,7 @@ import type { ApplicationNode, IngestionStatus, LiteratureIngestAndExtractSummar
 const DESCRIPTOR_BATCH_SIZE = 5;
 const DESCRIPTOR_CHUNKS_PER_PAPER = 5;
 const MAX_DESCRIPTOR_EXTRACTION = 100;
+const MAX_LITERATURE_SEARCH_RESULTS = 2000;
 const MAX_RECENT_DESCRIPTOR_DISPLAY = 25;
 const INGESTION_STORAGE_KEY = "application-finder.ingestion-workspace.v1";
 
@@ -38,7 +39,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
         setQuery(restored.query);
       }
       if (typeof restored.limit === "number") {
-        setLimit(Math.max(5, Math.min(restored.limit, 200)));
+        setLimit(Math.max(5, Math.min(restored.limit, MAX_LITERATURE_SEARCH_RESULTS)));
       }
       if (Array.isArray(restored.results)) {
         setResults(restored.results.map(normalizeLiteratureResult));
@@ -83,7 +84,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
   }
 
   async function searchLiterature() {
-    const searchLimit = Math.max(5, Math.min(limit, 200));
+    const searchLimit = Math.max(5, Math.min(limit, MAX_LITERATURE_SEARCH_RESULTS));
     const params = new URLSearchParams({ query: query.trim(), limit: String(searchLimit) });
     await runAction(
       "search",
@@ -271,10 +272,10 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
             <input
               className="focus-ring rounded border border-line bg-shell px-3 py-2"
               min={5}
-              max={200}
+              max={MAX_LITERATURE_SEARCH_RESULTS}
               type="number"
               value={limit}
-              onChange={(event) => setLimit(Math.max(5, Math.min(Number(event.target.value || 20), 200)))}
+              onChange={(event) => setLimit(Math.max(5, Math.min(Number(event.target.value || 20), MAX_LITERATURE_SEARCH_RESULTS)))}
             />
           </label>
           <button

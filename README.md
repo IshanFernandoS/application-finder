@@ -43,6 +43,7 @@ Important variables:
 - `OPENAI_MODEL`: reasoning model.
 - `OPENAI_EMBEDDING_MODEL`: embedding model.
 - `UNPAYWALL_EMAIL`: optional public API contact email, defaulting to `h.i.s.fernando@qmul.ac.uk`.
+- `PUBLIC_SEARCH_MAX_RESULTS`: maximum public literature search result count, defaulting to `2000`.
 - `ENABLE_PUBLIC_FULL_TEXT_FETCH`: tries open-access full text for public search ingestion before falling back to abstracts/metadata.
 - `PUBLIC_FULL_TEXT_MAX_PAPERS_PER_REQUEST`, `PUBLIC_FULL_TEXT_MAX_CHUNKS_PER_PAPER`, `PUBLIC_FULL_TEXT_DESCRIPTOR_CHUNKS_PER_PAPER`: caps for full-text retrieval and descriptor extraction.
 - `DATABASE_URL`: defaults to SQLite at `data/gap2material_em.db`.
