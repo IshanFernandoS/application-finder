@@ -37,7 +37,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
       (items) => {
         const normalized = items.map(normalizeLiteratureResult);
         setResults(normalized);
-        setSelected(new Set(normalized.filter((item) => !isFailure(item)).slice(0, 8).map(resultKey)));
+        setSelected(new Set());
         setMessage(`${normalized.length} papers found`);
       }
     );
@@ -215,14 +215,14 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
         {results.length ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="text-sm text-muted">{selectedCount} selected</div>
+              <div className="text-sm text-muted">{selectedCount} of {selectableCount} papers selected</div>
               <button
-                className="focus-ring rounded border border-line px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                className="focus-ring rounded bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={Boolean(busy) || selectableCount === 0}
                 onClick={() => setSelected(new Set(results.filter((item) => !isFailure(item)).map(resultKey)))}
                 type="button"
               >
-                Select all
+                Select all papers
               </button>
               <button
                 className="focus-ring rounded border border-line px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"

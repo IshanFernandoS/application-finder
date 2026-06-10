@@ -6,6 +6,7 @@ import { useState } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import type { ApplicationNode, ApplicationSpace, Gap } from "@/lib/types";
 import { EmptyState } from "./EmptyState";
+import type { ApplicationSpaceFilters } from "./SidebarFilters";
 
 const Plot = dynamic<any>(() => import("react-plotly.js"), { ssr: false });
 
@@ -13,10 +14,12 @@ type ColorMode = "cluster" | "confidence";
 
 export function ApplicationSpaceMap({
   space,
+  filters,
   selectedGapId,
   onSelectGap
 }: {
   space?: ApplicationSpace;
+  filters?: ApplicationSpaceFilters;
   selectedGapId?: string;
   onSelectGap?: (gap: Gap) => void;
 }) {
@@ -28,10 +31,27 @@ export function ApplicationSpaceMap({
   }
 
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredNodes = normalizedQuery ? space.nodes.filter((node) => nodeText(node).includes(normalizedQuery)) : space.nodes;
-  const filteredGaps = normalizedQuery ? space.gaps.filter((gap) => gapText(gap).includes(normalizedQuery)) : space.gaps;
-  const clusterById = new Map(space.clusters.map((cluster) => [cluster.cluster_id, cluster]));
+  const activeFilters = filters || {
+    domain: "",
+    frequency: "",
+    mechanism: "",
+    deviceType: "",
+    materialClass: "",
+    year: "",
+    minEvidence: ""
+  };
+  const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
+  const filteredNodes = space.nodes.filter((node) => matchesNodeFilters(node, activeFilters) && (!normalizedQuery || nodeText(node).includes(normalizedQuery)));
+  const visibleNodeIds = new Set(filteredNodes.map((node) => node.node_id));
   const visibleClusterIds = new Set(filteredNodes.map((node) => node.cluster_id).filter(Boolean));
+  const filteredGaps = space.gaps.filter(
+    (gap) =>
+      (!normalizedQuery || gapText(gap).includes(normalizedQuery)) &&
+      (!activeFilterCount ||
+        gap.nearby_application_ids.some((nodeId) => visibleNodeIds.has(nodeId)) ||
+        gap.nearby_cluster_ids.some((clusterId) => visibleClusterIds.has(clusterId)))
+  );
+  const clusterById = new Map(space.clusters.map((cluster) => [cluster.cluster_id, cluster]));
   const visibleClusters = space.clusters.filter((cluster) => visibleClusterIds.has(cluster.cluster_id));
   const selectedNode = space.nodes.find((node) => node.node_id === selectedNodeId) || filteredNodes[0];
   const selectedGap = space.gaps.find((gap) => gap.gap_id === selectedGapId) || filteredGaps[0];
@@ -163,7 +183,8 @@ export function ApplicationSpaceMap({
           <div>
             <h2 className="text-base font-semibold">Electromagnetic Application Space</h2>
             <p className="text-xs text-muted">
-              {filteredNodes.length} of {space.build.node_count} nodes, {space.build.cluster_count} clusters, {filteredGaps.length} of {space.gaps.length} gaps
+              {filteredNodes.length} of {space.build.node_count} nodes, {visibleClusters.length} of {space.build.cluster_count} clusters, {filteredGaps.length} of {space.gaps.length} gaps
+              {activeFilterCount ? `, ${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -239,8 +260,8 @@ export function ApplicationSpaceMap({
         }}
       />
 
-      {normalizedQuery && !filteredNodes.length && !filteredGaps.length ? (
-        <div className="border-t border-line px-4 py-3 text-sm text-muted">No application nodes or gaps match the current search.</div>
+      {(normalizedQuery || activeFilterCount > 0) && !filteredNodes.length && !filteredGaps.length ? (
+        <div className="border-t border-line px-4 py-3 text-sm text-muted">No application nodes or gaps match the current search and filters.</div>
       ) : null}
 
       <div className="grid gap-3 border-t border-line bg-shell/70 p-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
@@ -316,6 +337,23 @@ function clusterColor(cluster?: string) {
   const palette = ["#0ea5a5", "#2f80ed", "#f59e0b", "#ef6f6c", "#64748b", "#22a06b", "#8b5cf6", "#f97316", "#14b8a6", "#6366f1"];
   const index = Math.abs((cluster || "0").split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)) % palette.length;
   return palette[index];
+}
+
+function matchesNodeFilters(node: ApplicationNode, filters: ApplicationSpaceFilters) {
+  const minEvidence = Number(filters.minEvidence.replace("+", "") || 0);
+  return (
+    matches(filters.domain, node.domain) &&
+    matches(filters.frequency, node.operating_frequency_or_wavelength) &&
+    matches(filters.mechanism, node.physical_em_mechanism) &&
+    matches(filters.deviceType, node.device_type) &&
+    matches(filters.materialClass, node.material_class) &&
+    (!filters.year || String(node.year || "") === filters.year) &&
+    (!minEvidence || node.evidence_count >= minEvidence)
+  );
+}
+
+function matches(filterValue: string, nodeValue?: string | null) {
+  return !filterValue || nodeValue === filterValue;
 }
 
 function nodeText(node: ApplicationSpace["nodes"][number]) {
