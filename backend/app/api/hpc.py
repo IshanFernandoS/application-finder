@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..schemas import HPCJobCreateRequest
+from ..schemas import HPCJob, HPCJobCreateRequest
 from ..services.analytics_service import AnalyticsService
 from ..services.hpc_worker_service import HPCWorkerService
 from .utils import raise_http
@@ -94,5 +94,13 @@ def retrieve_job(job_id: str, _: None = Depends(_auth), db: Session = Depends(ge
 def cancel_job(job_id: str, _: None = Depends(_auth), db: Session = Depends(get_db)):
     try:
         return HPCWorkerService().cancel(db, job_id)
+    except Exception as exc:
+        raise_http(exc)
+
+
+@router.post("/jobs/{job_id}/worker-sync")
+def worker_sync(job_id: str, update: HPCJob, _: None = Depends(_auth), db: Session = Depends(get_db)):
+    try:
+        return HPCWorkerService().worker_sync(db, job_id, update)
     except Exception as exc:
         raise_http(exc)

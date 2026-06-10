@@ -40,7 +40,10 @@ class HPCWorkerService:
             warnings.append("HPC_WORKDIR is required before jobs can be submitted.")
         safe_auth = bool(settings.hpc_ssh_key_path or settings.hpc_ssh_control_path or os.environ.get("SSH_AUTH_SOCK"))
         if settings.hpc_enabled and not safe_auth:
-            warnings.append("Configure SSH agent forwarding, HPC_SSH_KEY_PATH, or HPC_SSH_CONTROL_PATH. Password automation is not supported.")
+            if settings.hpc_queue_only:
+                warnings.append("HPC queue-only relay mode is enabled. A local worker must submit queued jobs with SSH agent or keychain access.")
+            else:
+                warnings.append("Configure SSH agent forwarding, HPC_SSH_KEY_PATH, or HPC_SSH_CONTROL_PATH. Password automation is not supported.")
         return HPCStatus(
             enabled=settings.hpc_enabled,
             configured=settings.hpc_configured,
@@ -87,6 +90,13 @@ class HPCWorkerService:
             metadata={"payload": request.payload},
         )
         self._save(db, job)
+        if settings.hpc_queue_only:
+            job.status = HPCJobStatus.queued
+            job.metadata["relay_mode"] = "local_worker"
+            job.metadata["payload"] = request.payload
+            job.updated_at = datetime.now(timezone.utc).isoformat()
+            self._save(db, job)
+            return job
         try:
             job.status = HPCJobStatus.transferring_inputs
             job.updated_at = datetime.now(timezone.utc).isoformat()
@@ -140,6 +150,24 @@ class HPCWorkerService:
         job.updated_at = datetime.now(timezone.utc).isoformat()
         self._save(db, job)
         return job
+
+    def worker_sync(self, db: Session, job_id: str, update: HPCJob) -> HPCJob:
+        if update.job_id != job_id:
+            raise ConfigurationError("Worker update job_id does not match the URL job_id.")
+        existing = self.get(db, job_id)
+        existing.status = update.status
+        existing.slurm_job_id = update.slurm_job_id
+        existing.input_ref = update.input_ref
+        existing.remote_workdir = update.remote_workdir
+        existing.output_ref = update.output_ref
+        existing.log_excerpt = update.log_excerpt
+        existing.output_files = update.output_files
+        existing.candidates = update.candidates
+        existing.error = update.error
+        existing.metadata.update(update.metadata or {})
+        existing.updated_at = datetime.now(timezone.utc).isoformat()
+        self._save(db, existing)
+        return existing
 
     def _write_input(self, db: Session, job: HPCJob, request: HPCJobCreateRequest, local_workdir: Path) -> Path:
         payload = {

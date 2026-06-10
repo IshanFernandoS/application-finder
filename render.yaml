@@ -79,6 +79,8 @@ services:
         value: "true"
       - key: HPC_KNOWN_HOSTS_PATH
         sync: false
+      - key: HPC_QUEUE_ONLY
+        value: "true"
       - key: FRONTEND_URL
         sync: false
       - key: BACKEND_URL

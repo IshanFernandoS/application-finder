@@ -232,6 +232,7 @@ HPC_RSYNC_EXTRA_ARGS=
 HPC_STRICT_HOST_KEY_CHECKING=true
 HPC_KNOWN_HOSTS_PATH=
 HPC_SSH_CONTROL_PATH=
+HPC_QUEUE_ONLY=false
 ```
 
 If your institution requires password after public-key authentication, start a local SSH control master first:
@@ -241,6 +242,17 @@ scripts/hpc/start_control_master.sh
 ```
 
 Enter the HPC password interactively in your terminal. Application Finder can then reuse `HPC_SSH_CONTROL_PATH` for non-interactive `ssh`, `rsync`, and Slurm commands without storing or automating the password.
+
+Hosted backend with local relay:
+
+Set `HPC_QUEUE_ONLY=true` on Render when the hosted backend must not store an SSH private key. In this mode, Render creates queued HPC job records, and a local relay running on your Mac submits/polls/retrieves the jobs using your existing SSH agent, Apple Keychain, or SSH control master.
+
+```bash
+ADMIN_API_KEY=... AF_REMOTE_BACKEND_URL=https://application-finder-backend.onrender.com \
+  scripts/hpc/local_hpc_relay.py
+```
+
+This keeps the web-app user experience non-interactive while avoiding password automation and avoiding upload of your personal SSH private key.
 
 Admin-only HPC API:
 
