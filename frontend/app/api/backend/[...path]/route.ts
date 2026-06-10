@@ -55,12 +55,18 @@ async function proxy(request: NextRequest, context: RouteContext) {
   }
 
   const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
-  const response = await fetch(target, {
-    method: request.method,
-    headers,
-    body,
-    cache: "no-store"
-  });
+  let response: Response;
+  try {
+    response = await fetch(target, {
+      method: request.method,
+      headers,
+      body,
+      cache: "no-store"
+    });
+  } catch (exc) {
+    const message = exc instanceof Error ? exc.message : String(exc);
+    return NextResponse.json({ detail: `Backend request failed: ${message}` }, { status: 502 });
+  }
 
   const responseHeaders = new Headers();
   const responseContentType = response.headers.get("content-type");

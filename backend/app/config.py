@@ -37,7 +37,6 @@ class Settings:
     openai_api_key: Optional[str]
     openai_model: str
     openai_embedding_model: str
-    semantic_scholar_api_key: Optional[str]
     unpaywall_email: str
     literature_contact_email: str
     data_dir: Path
@@ -103,7 +102,6 @@ class Settings:
             openai_api_key=os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY") or None,
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4.1"),
             openai_embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large"),
-            semantic_scholar_api_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY") or None,
             unpaywall_email=os.getenv("UNPAYWALL_EMAIL", "h.i.s.fernando@qmul.ac.uk"),
             literature_contact_email=os.getenv("LITERATURE_CONTACT_EMAIL")
             or os.getenv("UNPAYWALL_EMAIL", "h.i.s.fernando@qmul.ac.uk"),

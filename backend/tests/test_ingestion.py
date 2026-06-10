@@ -10,6 +10,7 @@ from backend.app.config import settings as app_settings
 from backend.app.database import Base, DocumentRecord, EvidenceRecord
 from backend.app.ingestion.chunker import chunk_text
 from backend.app.ingestion.metadata_extractor import extract_metadata
+from backend.app.literature_sources.base import LiteratureSearchResult
 from backend.app.schemas import LiteratureResult
 from backend.app.services.ingestion_service import IngestionService
 from backend.app.services.object_storage_service import ObjectStorageService
@@ -33,6 +34,26 @@ def test_object_storage_service_local_mode_returns_local_path(tmp_path: Path):
     path = tmp_path / "artifact.json"
     path.write_text("{}", encoding="utf-8")
     assert ObjectStorageService().upload_file(path) == str(path)
+
+
+def test_public_search_uses_curated_sources_and_larger_limit(monkeypatch):
+    _configure_fake_literature_sources(monkeypatch)
+
+    results = IngestionService().public_search("electromagnetic absorber", limit=120)
+
+    assert len(results) == 120
+    assert {result.source for result in results} == {"arxiv", "crossref", "openalex", "pubmed"}
+    assert "semantic_scholar" not in {result.source for result in results}
+
+
+def test_public_search_skips_source_failures(monkeypatch):
+    _configure_fake_literature_sources(monkeypatch, failing_source="crossref")
+
+    results = IngestionService().public_search("electromagnetic absorber", limit=20)
+
+    assert len(results) == 15
+    assert {result.source for result in results} == {"arxiv", "openalex", "pubmed"}
+    assert not any(result.title.endswith("search failed") for result in results)
 
 
 def test_public_literature_results_ingest_and_skip_duplicates(tmp_path: Path, monkeypatch):
@@ -76,6 +97,39 @@ def test_public_literature_results_ingest_and_skip_duplicates(tmp_path: Path, mo
         assert (tmp_path / "metadata" / "evidence_chunks.jsonl").exists()
     finally:
         db.close()
+
+
+def _configure_fake_literature_sources(monkeypatch, failing_source: str | None = None):
+    test_settings = replace(app_settings, enable_online_metadata=True)
+    monkeypatch.setattr(ingestion_module, "settings", test_settings)
+
+    def source_factory(source_name: str):
+        class FakeSource:
+            def __init__(self, *args, **kwargs):
+                self.source_name = source_name
+
+            def search(self, query: str, limit: int = 10):
+                if source_name == failing_source:
+                    raise RuntimeError("provider unavailable")
+                return [
+                    LiteratureSearchResult(
+                        title=f"{source_name} paper {index} {query}",
+                        authors=["A. Researcher"],
+                        year=2024,
+                        doi=f"10.1000/{source_name}.{index}",
+                        url=f"https://example.test/{source_name}/{index}",
+                        source=source_name,
+                        abstract="Electromagnetic material evidence.",
+                    )
+                    for index in range(limit)
+                ]
+
+        return FakeSource
+
+    monkeypatch.setattr(ingestion_module, "OpenAlexSource", source_factory("openalex"))
+    monkeypatch.setattr(ingestion_module, "CrossrefSource", source_factory("crossref"))
+    monkeypatch.setattr(ingestion_module, "ArxivSource", source_factory("arxiv"))
+    monkeypatch.setattr(ingestion_module, "PubMedSource", source_factory("pubmed"))
 
 
 def test_public_literature_ingest_creates_metadata_evidence_without_abstract(tmp_path: Path, monkeypatch):

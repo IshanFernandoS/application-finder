@@ -30,7 +30,8 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
   }
 
   async function searchLiterature() {
-    const params = new URLSearchParams({ query: query.trim(), limit: String(limit) });
+    const searchLimit = Math.max(5, Math.min(limit, 200));
+    const params = new URLSearchParams({ query: query.trim(), limit: String(searchLimit) });
     await runAction(
       "search",
       () => apiPost<LiteratureResult[]>(`/ingest/public-search?${params.toString()}`),
@@ -197,10 +198,10 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
             <input
               className="focus-ring rounded border border-line bg-shell px-3 py-2"
               min={5}
-              max={50}
+              max={200}
               type="number"
               value={limit}
-              onChange={(event) => setLimit(Number(event.target.value || 20))}
+              onChange={(event) => setLimit(Math.max(5, Math.min(Number(event.target.value || 20), 200)))}
             />
           </label>
           <button

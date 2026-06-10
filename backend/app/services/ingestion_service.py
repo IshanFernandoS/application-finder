@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List
 
@@ -18,7 +19,6 @@ from ..literature_sources.base import LiteratureSearchResult
 from ..literature_sources.crossref import CrossrefSource
 from ..literature_sources.openalex import OpenAlexSource
 from ..literature_sources.pubmed import PubMedSource
-from ..literature_sources.semantic_scholar import SemanticScholarSource
 from ..literature_sources.zotero_import import import_zotero_file
 from ..schemas import Document, EvidenceChunk, LiteratureResult
 from .ids import stable_id
@@ -111,31 +111,23 @@ class IngestionService:
         query = query.strip()
         if not query:
             return []
+        requested_limit = max(1, min(int(limit or 10), 200))
         sources = [
             OpenAlexSource(settings.literature_contact_email),
             CrossrefSource(settings.literature_contact_email),
             ArxivSource(),
-            SemanticScholarSource(settings.semantic_scholar_api_key),
             PubMedSource(settings.literature_contact_email),
         ]
         results: List[LiteratureSearchResult] = []
-        per_source_limit = max(1, min(25, (limit + len(sources) - 1) // len(sources)))
-        for source in sources:
-            try:
-                results.extend(source.search(query, limit=per_source_limit))
-            except Exception as exc:
-                results.append(
-                    LiteratureSearchResult(
-                        title=f"{source.source_name} search failed",
-                        authors=[],
-                        year=None,
-                        doi=None,
-                        url=None,
-                        source=source.source_name,
-                        abstract=str(exc),
-                    )
-                )
-        return self._dedupe_results(results)[:limit]
+        per_source_limit = max(1, min(75, (requested_limit + len(sources) - 1) // len(sources)))
+        with ThreadPoolExecutor(max_workers=len(sources)) as executor:
+            future_by_source = {executor.submit(source.search, query, per_source_limit): source for source in sources}
+            for future in as_completed(future_by_source):
+                try:
+                    results.extend(future.result())
+                except Exception:
+                    continue
+        return self._dedupe_results(results)[:requested_limit]
 
     def ingest_public_results(self, db: Session, results: List[LiteratureResult]) -> Dict[str, int]:
         before_documents = db.query(DocumentRecord).count()
