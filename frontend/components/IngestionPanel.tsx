@@ -1,22 +1,71 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckSquare, ExternalLink, Loader2, PlusCircle, Search, Square, UploadCloud } from "lucide-react";
 import { apiGet, apiPost, apiUpload } from "@/lib/api";
 import type { ApplicationNode, IngestionStatus, LiteratureIngestAndExtractSummary, LiteratureIngestSummary, LiteratureResult } from "@/lib/types";
 
 const DESCRIPTOR_BATCH_SIZE = 5;
 const MAX_DESCRIPTOR_EXTRACTION = 50;
+const MAX_RECENT_DESCRIPTOR_DISPLAY = 25;
+const INGESTION_STORAGE_KEY = "application-finder.ingestion-workspace.v1";
+
+interface PersistedIngestionState {
+  query?: string;
+  limit?: number;
+  results?: LiteratureResult[];
+  selectedKeys?: string[];
+  recentNodes?: ApplicationNode[];
+}
 
 export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionStatus }) {
   const [query, setQuery] = useState("electromagnetic metamaterial inverse design high permittivity low loss");
   const [limit, setLimit] = useState(20);
   const [results, setResults] = useState<LiteratureResult[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [recentNodes, setRecentNodes] = useState<ApplicationNode[]>([]);
   const [status, setStatus] = useState<IngestionStatus | undefined>(initialStatus);
   const [busy, setBusy] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const restored = readPersistedIngestionState();
+    if (restored) {
+      if (typeof restored.query === "string") {
+        setQuery(restored.query);
+      }
+      if (typeof restored.limit === "number") {
+        setLimit(Math.max(5, Math.min(restored.limit, 200)));
+      }
+      if (Array.isArray(restored.results)) {
+        setResults(restored.results.map(normalizeLiteratureResult));
+      }
+      if (Array.isArray(restored.selectedKeys)) {
+        setSelected(new Set(restored.selectedKeys));
+      }
+      if (Array.isArray(restored.recentNodes)) {
+        setRecentNodes(restored.recentNodes.slice(0, MAX_RECENT_DESCRIPTOR_DISPLAY));
+      }
+    }
+    setHydrated(true);
+    void refreshRecentDescriptors();
+    void refreshStatus().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+    persistIngestionState({
+      query,
+      limit,
+      results: results.map(pruneLiteratureResultForStorage),
+      selectedKeys: Array.from(selected),
+      recentNodes: recentNodes.slice(0, MAX_RECENT_DESCRIPTOR_DISPLAY)
+    });
+  }, [hydrated, limit, query, recentNodes, results, selected]);
 
   async function runAction<T>(name: string, action: () => Promise<T>, onSuccess?: (result: T) => void) {
     setBusy(name);
@@ -72,6 +121,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
             application_nodes: status?.application_nodes
           }
         );
+        rememberExtractedNodes(nodes);
         setSelected(new Set());
       }
     );
@@ -95,6 +145,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
             application_nodes: status?.application_nodes
           }
         );
+        rememberExtractedNodes(result.application_nodes);
         setSelected((current) => {
           const next = new Set(current);
           next.delete(key);
@@ -108,6 +159,23 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
     const nextStatus = await apiGet<IngestionStatus>("/ingest/status");
     setStatus(nextStatus);
     return nextStatus;
+  }
+
+  async function refreshRecentDescriptors() {
+    try {
+      const nodes = await apiGet<ApplicationNode[]>("/ingest/descriptors?scope_id=electromagnetic_functional_materials&limit=25");
+      setRecentNodes(nodes.slice(0, MAX_RECENT_DESCRIPTOR_DISPLAY));
+      return nodes;
+    } catch {
+      return [];
+    }
+  }
+
+  function rememberExtractedNodes(nodes: ApplicationNode[]) {
+    if (!nodes.length) {
+      return;
+    }
+    setRecentNodes((current) => mergeApplicationNodes(nodes, current).slice(0, MAX_RECENT_DESCRIPTOR_DISPLAY));
   }
 
   function toggleResult(item: LiteratureResult) {
@@ -170,6 +238,7 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
               () => apiPost<ApplicationNode[]>("/ingest/extract-descriptors?scope_id=electromagnetic_functional_materials&limit=50"),
               (nodes) => {
                 setMessage(`${nodes.length} application descriptors extracted`);
+                rememberExtractedNodes(nodes);
                 void refreshStatus().catch(() => undefined);
               }
             )
@@ -317,6 +386,30 @@ export function IngestionPanel({ initialStatus }: { initialStatus?: IngestionSta
         </div>
       ) : null}
 
+      {recentNodes.length ? (
+        <section className="grid gap-3 border-t border-line pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">Recent Extracted Descriptors</h2>
+              <p className="mt-2 text-sm text-muted">Saved Application Finder descriptors from the corpus, restored when you return to this tab.</p>
+            </div>
+            <button
+              className="focus-ring rounded border border-line px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={Boolean(busy)}
+              onClick={() => void refreshRecentDescriptors()}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {recentNodes.map((node) => (
+              <DescriptorCard key={node.node_id} node={node} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="border-t border-line pt-5">
         <h2 className="text-base font-semibold">Corpus Status</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -335,6 +428,28 @@ function Metric({ label, value }: { label: string; value: string | number }) {
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-2 text-xl font-semibold">{value}</div>
     </div>
+  );
+}
+
+function DescriptorCard({ node }: { node: ApplicationNode }) {
+  const requirements = Array.isArray(node.em_property_requirements) ? node.em_property_requirements : [];
+  return (
+    <article className="rounded border border-line bg-shell p-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span className="rounded border border-line px-2 py-0.5">{node.domain || "electromagnetic"}</span>
+        {node.year ? <span>{node.year}</span> : null}
+        <span>{Math.round((node.confidence || 0) * 100)}% confidence</span>
+      </div>
+      <h3 className="mt-2 text-sm font-semibold">{node.label || node.node_id}</h3>
+      <p className="mt-2 line-clamp-3 text-sm text-muted">{node.application_text || "No descriptor text available."}</p>
+      <div className="mt-3 grid gap-2 text-xs text-muted">
+        {node.device_type ? <div><span className="font-medium text-ink">Device:</span> {node.device_type}</div> : null}
+        {node.physical_em_mechanism ? <div><span className="font-medium text-ink">Mechanism:</span> {node.physical_em_mechanism}</div> : null}
+        {requirements.length ? (
+          <div><span className="font-medium text-ink">EM requirements:</span> {requirements.slice(0, 3).join("; ")}</div>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -365,6 +480,50 @@ function isFailure(item: LiteratureResult) {
 
 function stripTags(value: string) {
   return value.replace(/<[^>]+>/g, "");
+}
+
+function mergeApplicationNodes(primary: ApplicationNode[], secondary: ApplicationNode[]) {
+  const seen = new Set<string>();
+  const merged: ApplicationNode[] = [];
+  for (const node of [...primary, ...secondary]) {
+    if (!node.node_id || seen.has(node.node_id)) {
+      continue;
+    }
+    seen.add(node.node_id);
+    merged.push(node);
+  }
+  return merged;
+}
+
+function pruneLiteratureResultForStorage(item: LiteratureResult): LiteratureResult {
+  const normalized = normalizeLiteratureResult(item);
+  return {
+    ...normalized,
+    abstract: normalized.abstract ? stripTags(normalized.abstract).slice(0, 5000) : normalized.abstract
+  };
+}
+
+function readPersistedIngestionState(): PersistedIngestionState | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(INGESTION_STORAGE_KEY);
+    return raw ? JSON.parse(raw) as PersistedIngestionState : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function persistIngestionState(state: PersistedIngestionState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.sessionStorage.setItem(INGESTION_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    window.sessionStorage.removeItem(INGESTION_STORAGE_KEY);
+  }
 }
 
 async function ingestResults(results: LiteratureResult[]) {

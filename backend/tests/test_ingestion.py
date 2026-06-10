@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 import backend.app.services.ingestion_service as ingestion_module
 import backend.app.services.object_storage_service as storage_module
 from backend.app.config import settings as app_settings
-from backend.app.database import Base, DocumentRecord, EvidenceRecord
+from backend.app.database import ApplicationNodeRecord, Base, DocumentRecord, EvidenceRecord
 from backend.app.ingestion.chunker import chunk_text
 from backend.app.ingestion.metadata_extractor import extract_metadata
 from backend.app.literature_sources.base import LiteratureSearchResult
@@ -237,5 +237,43 @@ def test_public_literature_ingest_backfills_missing_metadata_evidence(tmp_path: 
         assert summary["skipped"] == 0
         assert db.query(DocumentRecord).count() == 1
         assert db.query(EvidenceRecord).one().payload["section"] == "metadata"
+    finally:
+        db.close()
+
+
+def test_recent_application_nodes_returns_saved_descriptors(tmp_path: Path, monkeypatch):
+    test_settings = replace(app_settings, data_dir=tmp_path, object_storage_backend="local")
+    monkeypatch.setattr(ingestion_module, "settings", test_settings)
+    monkeypatch.setattr(storage_module, "settings", test_settings)
+
+    engine = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    db = Session()
+    try:
+        db.add_all(
+            [
+                ApplicationNodeRecord(
+                    node_id="node_a",
+                    scope_id="electromagnetic_functional_materials",
+                    payload={"node_id": "node_a", "label": "First descriptor"},
+                ),
+                ApplicationNodeRecord(
+                    node_id="node_b",
+                    scope_id="electromagnetic_functional_materials",
+                    payload={"node_id": "node_b", "label": "Second descriptor"},
+                ),
+                ApplicationNodeRecord(
+                    node_id="node_other_scope",
+                    scope_id="other_scope",
+                    payload={"node_id": "node_other_scope", "label": "Other scope"},
+                ),
+            ]
+        )
+        db.commit()
+
+        nodes = IngestionService().recent_application_nodes(db, "electromagnetic_functional_materials", limit=10)
+
+        assert [node["node_id"] for node in nodes] == ["node_b", "node_a"]
     finally:
         db.close()

@@ -102,6 +102,18 @@ def ingest_status(db: Session = Depends(get_db)):
     return IngestionService().status(db)
 
 
+@router.get("/descriptors")
+def recent_descriptors(
+    scope_id: str = "electromagnetic_functional_materials",
+    limit: int = 25,
+    db: Session = Depends(get_db),
+):
+    try:
+        return IngestionService().recent_application_nodes(db, scope_id=scope_id, limit=limit)
+    except Exception as exc:
+        raise_http(exc)
+
+
 @router.post("/extract-descriptors")
 def extract_descriptors(
     request: DescriptorExtractionRequest | None = Body(default=None),

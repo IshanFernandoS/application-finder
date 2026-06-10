@@ -184,6 +184,17 @@ class IngestionService:
             "application_nodes": db.query(ApplicationNodeRecord).count(),
         }
 
+    def recent_application_nodes(self, db: Session, scope_id: str, limit: int = 25) -> List[dict]:
+        safe_limit = max(1, min(int(limit or 25), 100))
+        records = (
+            db.query(ApplicationNodeRecord)
+            .filter(ApplicationNodeRecord.scope_id == scope_id)
+            .order_by(ApplicationNodeRecord.created_at.desc(), ApplicationNodeRecord.node_id.desc())
+            .limit(safe_limit)
+            .all()
+        )
+        return [record.payload for record in records]
+
     def _parse_path(self, path: Path) -> List[tuple]:
         if path.suffix.lower() == ".pdf":
             return parse_pdf(path)
